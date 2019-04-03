@@ -29,61 +29,70 @@
   Serial1 uses UART1 which is a transmit-only UART. UART1 TX pin is D4 (GPIO2,
   LED!!). If you use serial (UART0) to communicate with hardware, you can't use
   the Arduino Serial Monitor at the same time to debug your program! The best
-  way to debug is to use Serial1.println() and connect RX of an USB2Serial
+  way to debug is to use DEBUG_PRINTLN() and connect RX of an USB2Serial
   adapter (FTDI, Profilic, CP210, ch340/341) to D4 and use a terminal program
   like CuteCom or CleverTerm to listen to D4.
 */
 
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-
-#include <Crypto.h>
 #include <AES.h>
+#include <Crypto.h>
+#include <ESP8266WiFi.h>
 #include <GCM.h>
+#include <PubSubClient.h>
 #include <string.h>
 
+#include "user_config.h"
+
+// clang-format off
+#ifndef DEBUG
+  #define DEBUG_BEGIN(...)
+  #define DEBUG_PRINT(...)
+  #define DEBUG_PRINTLN(...)
+#else
+  #define DEBUG_BEGIN(...) Serial1.begin(__VA_ARGS__)
+  #define DEBUG_PRINT(...) Serial1.print(__VA_ARGS__)
+  #define DEBUG_PRINTLN(...) Serial1.println(__VA_ARGS__)  
+#endif
+// clang-format on
+
 #define MAX_LINE_LENGTH 1024
-// uncomment if debugging requested
-#define DEBUG
-// uncomment if DHCP needed
-#define STATIC
+#define LOOP_DELAY 59000 // 59 seconds
 
-IPAddress wemos_ip (192,168,178,100); //static IP
-IPAddress dns_ip     (192,168,178,1);
-IPAddress gateway_ip (192,168,178,1);
-IPAddress subnet_mask(255,255,255,0);
+#ifdef USE_WIFI
 WiFiClient espClient;
-PubSubClient client(espClient);
+#else
+#warning Wifi is disabled
+#endif
 
-const char ssid[] = "mywifi";
-const char password[] = "mypass";
-const char *mqtt_server = "192.168.178.101";
-const int  mqttPort = 1883;
-const char *clientId = "smarty_lam1_p1";
-const char *topic = "lamsmarty";
-const char *smartyreader_hostname = "Smartyreader";
+#ifdef USE_MQTT
+PubSubClient mqttClient(espClient);
+#else
+#warning MQTT is disabled!
+#endif
+
+#ifdef USE_FAKE_SMART_METER
+#warning Using fake smart meter!
+#endif
 
 const byte DATA_REQUEST_SM = D3; //active Low!
-const int sll = 50; // length of a line if printing serial raw data
+const int sll = 50;              // length of a line if printing serial raw data
 
-struct TestVector {
-    const char *name;
-    uint8_t key[16];
-    uint8_t ciphertext[MAX_LINE_LENGTH];
-    uint8_t authdata[17];
-    uint8_t iv[12];
-    uint8_t tag[16];
-    uint8_t authsize;
-    uint16_t datasize;
-    uint8_t tagsize;
-    uint8_t ivsize; };
+struct TestVector
+{
+  const char *name;
+  uint8_t key[16];
+  uint8_t ciphertext[MAX_LINE_LENGTH];
+  uint8_t authdata[17];
+  uint8_t iv[12];
+  uint8_t tag[16];
+  uint8_t authsize;
+  uint16_t datasize;
+  uint8_t tagsize;
+  uint8_t ivsize;
+};
 
 TestVector Vector_SM;
 GCM<AES128> *gcmaes128 = 0;
-
-//Key for SAG1030700089067
-uint8_t key_SM_LAM_1[] = {0xAE, 0xBD, 0x21, 0xB7, 0x69, 0xA6, 0xD1, 0x3C,
-                          0x0D, 0xF0, 0x64, 0xE3, 0x83, 0x68, 0x2E, 0xFF};
 
 char *identification;
 char *p1_version;
@@ -115,448 +124,702 @@ char *current_l1;
 char *current_l2;
 char *current_l3;
 
-char *id_p1_version = "1-3:0.2.8(";
-char *id_timestamp = "0-0:1.0.0(";
-char *id_equipment_id = "0-0:42.0.0(";
-char *id_energy_delivered_tariff1 = "1-0:1.8.0(";
-char *id_energy_returned_tariff1 = "1-0:2.8.0(";
-char *id_reactive_energy_delivered_tariff1 = "1-0:3.8.0(";
-char *id_reactive_energy_returned_tariff1 = "1-0:4.8.0(";
-char *id_power_delivered = "1-0:1.7.0(";
-char *id_power_returned = "1-0:2.7.0(";
-char *id_reactive_power_delivered = "1-0:3.7.0(";
-char *id_reactive_power_returned = "1-0:4.7.0(";
-char *id_electricity_threshold = "0-0:17.0.0(";
-char *id_electricity_switch_position = "0-0:96.3.10(";
-char *id_electricity_failures = "0-0:96.7.21(";
-char *id_electricity_sags_l1 = "1-0:32.32.0(";
-char *id_electricity_sags_l2 = "1-0:52.32.0(";
-char *id_electricity_sags_l3 = "1-0:72.32.0(";
-char *id_electricity_swells_l1 = "1-0:32.36.0(";
-char *id_electricity_swells_l2 = "1-0:52.36.0(";
-char *id_electricity_swells_l3 = "1-0:72.36.0(";
-char *id_message_short = "0-0:96.13.0(";
-char *id_message2_long = "0-0:96.13.2(";
-char *id_message3_long = "0-0:96.13.3(";
-char *id_message4_long = "0-0:96.13.4(";
-char *id_message5_long = "0-0:96.13.5(";
-char *id_current_l1 = "1-0:31.7.0(";
-char *id_current_l2 = "1-0:51.7.0(";
-char *id_current_l3 = "1-0:71.7.0(";
+const char *id_p1_version = "1-3:0.2.8(";
+const char *id_timestamp = "0-0:1.0.0(";
+const char *id_equipment_id = "0-0:42.0.0(";
+const char *id_energy_delivered_tariff1 = "1-0:1.8.0(";
+const char *id_energy_returned_tariff1 = "1-0:2.8.0(";
+const char *id_reactive_energy_delivered_tariff1 = "1-0:3.8.0(";
+const char *id_reactive_energy_returned_tariff1 = "1-0:4.8.0(";
+const char *id_power_delivered = "1-0:1.7.0(";
+const char *id_power_returned = "1-0:2.7.0(";
+const char *id_reactive_power_delivered = "1-0:3.7.0(";
+const char *id_reactive_power_returned = "1-0:4.7.0(";
+const char *id_electricity_threshold = "0-0:17.0.0(";
+const char *id_electricity_switch_position = "0-0:96.3.10(";
+const char *id_electricity_failures = "0-0:96.7.21(";
+const char *id_electricity_sags_l1 = "1-0:32.32.0(";
+const char *id_electricity_sags_l2 = "1-0:52.32.0(";
+const char *id_electricity_sags_l3 = "1-0:72.32.0(";
+const char *id_electricity_swells_l1 = "1-0:32.36.0(";
+const char *id_electricity_swells_l2 = "1-0:52.36.0(";
+const char *id_electricity_swells_l3 = "1-0:72.36.0(";
+const char *id_message_short = "0-0:96.13.0(";
+const char *id_message2_long = "0-0:96.13.2(";
+const char *id_message3_long = "0-0:96.13.3(";
+const char *id_message4_long = "0-0:96.13.4(";
+const char *id_message5_long = "0-0:96.13.5(";
+const char *id_current_l1 = "1-0:31.7.0(";
+const char *id_current_l2 = "1-0:51.7.0(";
+const char *id_current_l3 = "1-0:71.7const .0(";
 
 uint8_t telegram[MAX_LINE_LENGTH];
-char buffer[MAX_LINE_LENGTH-30];
+char buffer[MAX_LINE_LENGTH - 30];
 char msg[128], filename[13];
-int test,Tlength;
+int test, Tlength;
 
-void setup() {
+void setup()
+{
   delay(1000);
-  pinMode(LED_BUILTIN, OUTPUT);    // Initialize outputs
-  digitalWrite(LED_BUILTIN,LOW);   // On
-  setup_wifi();
-  client.setServer(mqtt_server,mqttPort);
-  digitalWrite(LED_BUILTIN,HIGH);   // Off
-  #ifdef DEBUG
-  Serial1.begin(115200); // transmit-only UART for debugging on D4 (LED!)
-  Serial1.println("Serial is working!");
-  #endif // #ifdef DEBUG
+
+  pinMode(LED_BUILTIN, OUTPUT); // Initialize outputs
   pinMode(DATA_REQUEST_SM, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW); // On
+
+  DEBUG_BEGIN(115200); // transmit-only UART for debugging on D4 (LED!)
+  DEBUG_PRINTLN("\nSerial is working.");
+
+  setup_networking();
+
+#ifdef USE_MQTT
+  mqttClient.setServer(mqtt_server, mqttPort);
+#endif
+
+  digitalWrite(LED_BUILTIN, HIGH); // Off
+
   delay(100);
+
   Serial.begin(115200); // Hardware serial connected to smarty
   Serial.setRxBufferSize(1024);
-  #ifndef DEBUG
-  for(int i=0; i<3; i++){
-        digitalWrite(LED_BUILTIN,HIGH);   // Off
-        delay(200);
-        digitalWrite(LED_BUILTIN,LOW);   // On
-        delay(200); }
-  #endif // ifndef DEBUG
-  delay(2000);
-  }
 
-void loop() {
-  #ifdef DEBUG
-  Serial1.println("------------------");
-  Serial1.println("------------------");
-  Serial1.println("Loop begins");
-  Serial1.println("------------------");
-  #endif // ifdef DEBUG
-  //digitalWrite(LED_BUILTIN,LOW);   // On
-  if (!client.connected()) { reconnect(); }
-  client.loop();
-  memset(telegram, '1', sizeof(telegram));
-  digitalWrite(DATA_REQUEST_SM,LOW);   // Request serial data On
-  delay(10);
-  Tlength = readTelegram();
-  digitalWrite(DATA_REQUEST_SM,HIGH);   // Request serial data Off
-  #ifdef DEBUG
-  print_raw_data(Tlength);
-  Serial1.println("------------------");
-  #endif // ifdef DEBUG
-  init_vector(&Vector_SM,"Vector_SM",key_SM_LAM_1);
-  if (Vector_SM.datasize != 1024) {
-    decrypt_text(&Vector_SM);
-    parse_dsmr_string(buffer);
-    snprintf (msg, 128, "{\"dt\":\"%s\",\"id\":\"%c%c%c\",\"c1\":\"%s\",\""
-              "p1\":\"%s\"}",
-              timestamp,equipment_id[13],equipment_id[14],equipment_id[15],
-              energy_delivered_tariff1, energy_returned_tariff1);
-    test=client.publish(topic, msg);
-    #ifdef DEBUG
-    Serial1.println("Print Vector:");
-    print_vector(&Vector_SM);
-    Serial1.println("------------------");
-    Serial1.println("Print DSMR:");
-    print_dsmr();
-    Serial1.println("------------------");
-    Serial1.println("Published message:");
-    Serial1.println(msg);
-    Serial1.println("------------------");
-    #endif // ifdef DEBUG
-  }
-  #ifndef DEBUG
-  for(int i=0; i<2; i++){
-        digitalWrite(LED_BUILTIN,HIGH);   // Off
-        delay(200);
-        digitalWrite(LED_BUILTIN,LOW);   // On
-        delay(200); }*/
-  delay(150);
-  digitalWrite(LED_BUILTIN,HIGH);   // Off
-  #endif // ifndef DEBUG
-  delay(59000);
+  delay(2000);
 }
 
-int readTelegram() {
+void loop()
+{
+  DEBUG_PRINTLN("------------------");
+  DEBUG_PRINTLN("Loop begins");
+
+#ifdef USE_MQTT
+  if (!mqttClient.connected())
+  {
+    reconnect_mqtt();
+  }
+  mqttClient.loop();
+// after mqtt is connected, we should use local_delay instead of delay
+// to ensure the watchdog is fed correctly
+#endif
+
+  Tlength = readTelegram();
+  if (Tlength == 0)
+  {
+    DEBUG_PRINTLN("No data received, waiting");
+    local_delay(LOOP_DELAY);
+    return;
+  }
+  debug_print_raw_data(Tlength);
+
+  init_vector(&Vector_SM, "Vector_SM", key_SM_LAM_1);
+  if (Vector_SM.datasize != 1024)
+  {
+    debug_print_vector(&Vector_SM);
+
+    decrypt_text_to_buffer(&Vector_SM);
+
+    parse_dsmr_string(buffer);
+    debug_print_dsmr();
+
+    // create a message to post to mqtt
+    snprintf(msg, 128, "{"
+                       "\"dt\":\"%s\","
+                       "\"c1\":\"%s\","
+                       "\"p1\":\"%s\","
+                       "\"pwr\":\"%s\"}",
+
+             timestamp,
+             energy_delivered_tariff1,
+             energy_returned_tariff1,
+             power_delivered);
+    DEBUG_PRINTLN("Message to publish:");
+    DEBUG_PRINTLN(msg);
+#ifdef USE_MQTT
+    test = mqttClient.publish(topic, msg);
+#endif
+  }
+  else
+  {
+    DEBUG_PRINTLN("Ignoring vector with MAX datasize");
+  }
+
+  DEBUG_PRINTLN("End of loop, waiting");
+  local_delay(LOOP_DELAY);
+}
+
+/*
+  Read data from the counter on the serial line
+*/
+int readTelegram()
+{
   int cnt = 0;
-  while ((Serial.available()) && (cnt!= MAX_LINE_LENGTH)) {
+
+  DEBUG_PRINTLN("Entering readTelegram");
+
+  // initialise telegram buffer with 1 values and read data
+  memset(telegram, '1', sizeof(telegram));
+
+#ifdef USE_FAKE_SMART_METER
+  cnt = sizeof(fake_vector);
+  DEBUG_PRINTLN(cnt);
+  memcpy(telegram, fake_vector, cnt);
+#else
+  digitalWrite(DATA_REQUEST_SM, LOW); // Request serial data On
+  local_delay(10);
+  while ((Serial.available()) && (cnt != MAX_LINE_LENGTH))
+  {
     telegram[cnt] = Serial.read();
-    cnt++; }
+    cnt++;
+  }
+  digitalWrite(DATA_REQUEST_SM, HIGH); // Request serial data Off
+#endif
   return (cnt);
 }
 
-void setup_wifi() {
+void setup_networking()
+{
+#ifdef USE_WIFI
+  DEBUG_PRINTLN("Entering WiFi setup.");
   WiFi.softAPdisconnect(); // to eliminate Hotspot
   WiFi.disconnect();
+
   WiFi.mode(WIFI_STA);
   delay(200);
-  #ifdef STATIC    
+#ifdef USE_WIFI_STATIC
   WiFi.config(wemos_ip, gateway_ip, subnet_mask);
-  #endif // ifdef STATIC
+#endif // ifdef STATIC
   WiFi.hostname(smartyreader_hostname);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    DEBUG_PRINT(".");
+  }
+  DEBUG_PRINTLN("\nWiFi connected");
+  DEBUG_PRINTLN("IP address: ");
+  DEBUG_PRINTLN(WiFi.localIP());
+
   randomSeed(micros());
+#endif
 }
 
-void reconnect() {
-  while (!client.connected()) { // Loop until we're reconnected
-    if (client.connect(clientId)) { // Attempt to connect
-      client.publish(topic, "{\"dt\":\"connected\"}"); // Once connected, publish an announcement...
+void reconnect_mqtt()
+{
+#ifdef USE_MQTT
+  DEBUG_PRINTLN("Connecting to mqtt");
+  while (!mqttClient.connected())
+  {
+    DEBUG_PRINT(".");
+    if (mqttClient.connect(clientId))
+    {
+      DEBUG_PRINTLN("\nPublishing connection confirmation to mqtt.");
+      mqttClient.publish(topic, "{\"dt\":\"connected\"}");
     }
-    else { delay(5000); } // Wait 5 seconds before retrying
+    else
+    {
+      delay(5000);
+    } // Wait 5 seconds before retrying
   }
+#endif
 }
 
 // Convert binary coded decimal to decimal number
-byte bcdToDec(byte val) { return((val/16*10) + (val%16)); }
+byte bcdToDec(byte val) { return ((val / 16 * 10) + (val % 16)); }
 
 // Convert decimal number to binary coded decimal
-byte decToBcd(byte val) { return((val/10*16) + (val%10)); }
+byte decToBcd(byte val) { return ((val / 10 * 16) + (val % 10)); }
 
-void init_vector(TestVector *vect, char *Vect_name, uint8_t *key_SM) {
-  vect->name = Vect_name;  // vector name
+/*
+  Decode the raw data and fill the vector
+*/
+void init_vector(TestVector *vect, const char *Vect_name, uint8_t *key_SM)
+{
+  DEBUG_PRINTLN("Entering init_vector");
+  vect->name = Vect_name; // vector name
   for (int i = 0; i < 16; i++)
-     vect->key[i] = key_SM[i];
-  uint16_t Data_Length = uint16_t(telegram[11])*256 + uint16_t(telegram[12])-17; // get length of data
-  if (Data_Length>MAX_LINE_LENGTH) Data_Length = MAX_LINE_LENGTH;
+    vect->key[i] = key_SM[i];
+  uint16_t Data_Length = uint16_t(telegram[11]) * 256 + uint16_t(telegram[12]) - 17; // get length of data
+  if (Data_Length > MAX_LINE_LENGTH)
+    Data_Length = MAX_LINE_LENGTH;
   for (int i = 0; i < Data_Length; i++)
-     vect->ciphertext[i] = telegram[i+18];
+    vect->ciphertext[i] = telegram[i + 18];
   uint8_t AuthData[] = {0x30, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66,
                         0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
                         0xFF};
   for (int i = 0; i < 17; i++)
-     vect->authdata[i] = AuthData[i];
+    vect->authdata[i] = AuthData[i];
   for (int i = 0; i < 8; i++)
-     vect->iv[i] = telegram[2+i];
+    vect->iv[i] = telegram[2 + i];
   for (int i = 8; i < 12; i++)
-     vect->iv[i] = telegram[6+i];
+    vect->iv[i] = telegram[6 + i];
   for (int i = 0; i < 12; i++)
-     vect->tag[i] = telegram[Data_Length+18+i];
+    vect->tag[i] = telegram[Data_Length + 18 + i];
   vect->authsize = 17;
   vect->datasize = Data_Length;
   vect->tagsize = 12;
-  vect->ivsize  = 12;
+  vect->ivsize = 12;
+  DEBUG_PRINTLN("Exiting init_vector");
 }
 
-void decrypt_text(TestVector *vect) {
+/*
+  Decrypt text in the vector and put it in the buffer
+*/
+void decrypt_text_to_buffer(TestVector *vect)
+{
+  DEBUG_PRINTLN("Entering decrypt_text");
   gcmaes128 = new GCM<AES128>();
   size_t posn, len;
   size_t inc = vect->datasize;
   memset(buffer, 0xBA, sizeof(buffer));
   gcmaes128->setKey(vect->key, gcmaes128->keySize());
   gcmaes128->setIV(vect->iv, vect->ivsize);
-  for (posn = 0; posn < vect->datasize; posn += inc) {
+  for (posn = 0; posn < vect->datasize; posn += inc)
+  {
     len = vect->datasize - posn;
-    if (len > inc) len = inc;
-    gcmaes128->decrypt((uint8_t*)buffer + posn, vect->ciphertext + posn, len);
-   }
+    if (len > inc)
+      len = inc;
+    gcmaes128->decrypt((uint8_t *)buffer + posn, vect->ciphertext + posn, len);
+  }
   delete gcmaes128;
+  DEBUG_PRINTLN("Exiting decrypt_text");
 }
 
-void parse_dsmr_string(char *mystring) {
-   bool result;
-   char *field;
-   identification = strtok(mystring, "\n"); // get the first field
-   while ((field[0] != '!') && (field != NULL)) { // walk through other fields
-     field = strtok(NULL, "\n");
-     result=test_field(field,id_p1_version);
-     if (result) {
-        get_field(field);
-        p1_version = field;
-      }
-     result=test_field(field,id_timestamp);
-     if (result) {
-        get_field(field);
-        timestamp = field;
-      }
-     result=test_field(field,id_equipment_id);
-     if (result) {
-        get_field(field);
-        convert_equipment_id(field);
-        equipment_id = field;
-      }
-     result=test_field(field,id_energy_delivered_tariff1);
-     if (result) {
-        get_field(field);
-        energy_delivered_tariff1 = field;
-      }
-     result=test_field(field,id_energy_returned_tariff1);
-     if (result) {
-        get_field(field);
-        energy_returned_tariff1 = field;
-      }
-     result=test_field(field,id_reactive_energy_delivered_tariff1);
-     if (result) {
-        get_field(field);
-        reactive_energy_delivered_tariff1 = field;
-      }
-     result=test_field(field,id_reactive_energy_returned_tariff1);
-     if (result) {
-        get_field(field);
-        reactive_energy_returned_tariff1 = field;
-      }
-     result=test_field(field,id_power_delivered);
-     if (result) {
-        get_field(field);
-        power_delivered = field;
-      }
-     result=test_field(field,id_power_returned);
-     if (result) {
-        get_field(field);
-        power_returned = field;
-      }
-     result=test_field(field,id_reactive_power_delivered);
-     if (result) {
-        get_field(field);
-        reactive_power_delivered = field;
-      }
-     result=test_field(field,id_reactive_power_returned);
-     if (result) {
-        get_field(field);
-        reactive_power_returned = field;
-      }
-     result=test_field(field,id_electricity_threshold);
-     if (result) {
-        get_field(field);
-        electricity_threshold = field;
-      }
-     result=test_field(field,id_electricity_switch_position);
-     if (result) {
-        get_field(field);
-        electricity_switch_position = field;
-      }
-     result=test_field(field,id_electricity_failures);
-     if (result) {
-        get_field(field);
-        electricity_failures = field;
-      }
-     result=test_field(field,id_electricity_sags_l1);
-     if (result) {
-        get_field(field);
-        electricity_sags_l1 = field;
-      }
-     result=test_field(field,id_electricity_sags_l2);
-     if (result) {
-        get_field(field);
-        electricity_sags_l2 = field;
-      }
-     result=test_field(field,id_electricity_sags_l3);
-     if (result) {
-        get_field(field);
-        electricity_sags_l3 = field;
-      }
-     result=test_field(field,id_electricity_swells_l1);
-     if (result) {
-        get_field(field);
-        electricity_swells_l1 = field;
-      }
-     result=test_field(field,id_electricity_swells_l2);
-     if (result) {
-        get_field(field);
-        electricity_swells_l2 = field;
-      }
-     result=test_field(field,id_electricity_swells_l3);
-     if (result) {
-        get_field(field);
-        electricity_swells_l3 = field;
-      }
-     result=test_field(field,id_message_short);
-     if (result) {
-        get_field(field);
-        message_short = field;
-      }
-     result=test_field(field,id_message2_long);
-     if (result) {
-        get_field(field);
-        message2_long = field;
-      }
-     result=test_field(field,id_message3_long);
-     if (result) {
-        get_field(field);
-        message3_long = field;
-      }
-     result=test_field(field,id_message4_long);
-     if (result) {
-        get_field(field);
-        message4_long = field;
-      }
-     result=test_field(field,id_message5_long);
-     if (result) {
-        get_field(field);
-        message5_long = field;
-      }
-     result=test_field(field,id_current_l1);
-     if (result) {
-        get_field(field);
-        current_l1 = field;
-      }
-     result=test_field(field,id_current_l2);
-     if (result) {
-        get_field(field);
-        current_l2 = field;
-      }
-     result=test_field(field,id_current_l3);
-     if (result) {
-        get_field(field);
-        current_l3 = field;
-      }
-   }
+/*
+  Parse fields in mystgring (buffer) and store in global variables
+*/
+void parse_dsmr_string(char *mystring)
+{
+  DEBUG_PRINTLN("Entering parse_dsmr_string");
+  DEBUG_PRINTLN("String to parse: ");
+  DEBUG_PRINTLN(mystring);
+
+  bool result;
+  char *field = (char *)"bla";
+
+  identification = strtok(mystring, "\n"); // get the first field
+
+  while ((field[0] != '!') && (field != NULL))
+  { // walk through other fields
+    field = strtok(NULL, "\n");
+    // DEBUG_PRINT("Testing field: ");
+    // DEBUG_PRINTLN(field);
+    if (strlen(field) < 10)
+    {
+      continue;
+    }
+    if (test_field(field, id_p1_version))
+    {
+      replace_field_by_value(field);
+      p1_version = field;
+      continue;
+    }
+    result = test_field(field, id_timestamp);
+    if (result)
+    {
+      replace_field_by_value(field);
+      timestamp = field;
+      continue;
+    }
+    result = test_field(field, id_equipment_id);
+    if (result)
+    {
+      replace_field_by_value(field);
+      convert_equipment_id(field);
+      equipment_id = field;
+      continue;
+    }
+    result = test_field(field, id_energy_delivered_tariff1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      energy_delivered_tariff1 = field;
+      continue;
+    }
+    result = test_field(field, id_energy_returned_tariff1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      energy_returned_tariff1 = field;
+      continue;
+    }
+    result = test_field(field, id_reactive_energy_delivered_tariff1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      reactive_energy_delivered_tariff1 = field;
+      continue;
+    }
+    result = test_field(field, id_reactive_energy_returned_tariff1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      reactive_energy_returned_tariff1 = field;
+      continue;
+    }
+    result = test_field(field, id_power_delivered);
+    if (result)
+    {
+      replace_field_by_value(field);
+      power_delivered = field;
+      continue;
+    }
+    result = test_field(field, id_power_returned);
+    if (result)
+    {
+      replace_field_by_value(field);
+      power_returned = field;
+      continue;
+    }
+    result = test_field(field, id_reactive_power_delivered);
+    if (result)
+    {
+      replace_field_by_value(field);
+      reactive_power_delivered = field;
+      continue;
+    }
+    result = test_field(field, id_reactive_power_returned);
+    if (result)
+    {
+      replace_field_by_value(field);
+      reactive_power_returned = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_threshold);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_threshold = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_switch_position);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_switch_position = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_failures);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_failures = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_sags_l1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_sags_l1 = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_sags_l2);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_sags_l2 = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_sags_l3);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_sags_l3 = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_swells_l1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_swells_l1 = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_swells_l2);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_swells_l2 = field;
+      continue;
+    }
+    result = test_field(field, id_electricity_swells_l3);
+    if (result)
+    {
+      replace_field_by_value(field);
+      electricity_swells_l3 = field;
+      continue;
+    }
+    result = test_field(field, id_message_short);
+    if (result)
+    {
+      replace_field_by_value(field);
+      message_short = field;
+      continue;
+    }
+    result = test_field(field, id_message2_long);
+    if (result)
+    {
+      replace_field_by_value(field);
+      message2_long = field;
+      continue;
+    }
+    result = test_field(field, id_message3_long);
+    if (result)
+    {
+      replace_field_by_value(field);
+      message3_long = field;
+      continue;
+    }
+    result = test_field(field, id_message4_long);
+    if (result)
+    {
+      replace_field_by_value(field);
+      message4_long = field;
+      continue;
+    }
+    result = test_field(field, id_message5_long);
+    if (result)
+    {
+      replace_field_by_value(field);
+      message5_long = field;
+      continue;
+    }
+    result = test_field(field, id_current_l1);
+    if (result)
+    {
+      replace_field_by_value(field);
+      current_l1 = field;
+      continue;
+    }
+    result = test_field(field, id_current_l2);
+    if (result)
+    {
+      replace_field_by_value(field);
+      current_l2 = field;
+      continue;
+    }
+    result = test_field(field, id_current_l3);
+    if (result)
+    {
+      replace_field_by_value(field);
+      current_l3 = field;
+      continue;
+    }
+  }
+  DEBUG_PRINTLN("Exiting parse_dsmr_string");
 }
 
-void convert_equipment_id(char *mystring) { //coded in HEX
-  int len =strlen(mystring);
-  for (int i=0; i<len/2; i++)
-    mystring[i]=char(((int(mystring[i*2]))-48)*16+(int(mystring[i*2+1])-48));
-  mystring[(len/2)]= NULL;
+void convert_equipment_id(char *mystring)
+{ //coded in HEX
+  //DEBUG_PRINTLN("Entering convert_equipment_id");
+  int len = strlen(mystring);
+  for (int i = 0; i < len / 2; i++)
+    mystring[i] = char(((int(mystring[i * 2])) - 48) * 16 + (int(mystring[i * 2 + 1]) - 48));
+  mystring[(len / 2)] = 0;
 }
 
-void get_field(char *mystring) {
-  int a = strcspn (mystring,"(");
-  int b = strcspn (mystring,")");
+/*
+  Replace mystring with the value in parenteses.
+  e.g. 1-0:3.7.0(00.000) becomes 00.000
+*/
+void replace_field_by_value(char *mystring)
+{
+  //DEBUG_PRINTLN("Entering replace_field_by_value");
+  int a = strcspn(mystring, "(");
+  int b = strcspn(mystring, ")");
   int j = 0;
-  for (int i=a+1; i<b; i++) {
+  for (int i = a + 1; i < b; i++)
+  {
     mystring[j] = mystring[i];
     j++;
   }
-  mystring[j]= NULL;
+  mystring[j] = 0;
 }
 
-bool test_field(char *field2, char *dmsr_field_id) {
-  bool result = true;
-  for (int i=0; i<10; i++) {
-    if(field2[i] == dmsr_field_id[i]) result= result && true;
-    else result = false;
+/*
+  Return true if the first cmp_len characters of the two fields are the same, false otherwise.
+*/
+bool test_field(char *field2, const char *dmsr_field_id)
+{
+  const int cmp_len = 10;
+  if (strlen(field2) < cmp_len)
+  {
+    DEBUG_PRINT("Trying to compare a field that is too short: ");
+    DEBUG_PRINTLN(field2);
+    return false;
   }
-  return result;
-}
-
-void print_raw_data(int Tlength) {
-  Serial1.print("Raw length in Byte: ");
-  Serial1.println(Tlength);
-  Serial1.println("Raw data: ");
-  int mul = (Tlength/sll);
-  for(int i=0; i<mul; i++) {
-    for(int j=0; j<sll;j++) { Serial1.print(telegram[i*sll+j],HEX); }
-    Serial1.println();
+  for (int i = 0; i < cmp_len; i++)
+  {
+    if (field2[i] != dmsr_field_id[i])
+      return false;
   }
-  for(int j=0; j<(Tlength%sll);j++){ Serial1.print(telegram[mul*sll+j],HEX); }
-  Serial1.println();
+  return true;
 }
 
-void print_vector(TestVector *vect) {
-    int ll = 64;
-    Serial1.print("\nVector_Name: ");
-    Serial1.println(vect->name);
-    Serial1.print("Key: ");
-    for(int cnt=0; cnt<16;cnt++)
-        Serial1.print(vect->key[cnt],HEX);
-    Serial1.print("\nData (Text): ");
-    int mul = (vect->datasize/sll);
-    for(int i=0; i<mul; i++) {
-      for(int j=0; j<sll;j++) { Serial1.print(vect->ciphertext[i*sll+j],HEX); }
-      Serial1.println();
+void debug_print_raw_data(int Tlength)
+{
+  DEBUG_PRINT("Raw length in Byte: ");
+  DEBUG_PRINTLN(Tlength);
+  DEBUG_PRINTLN("Raw data: ");
+  int mul = (Tlength / sll);
+  for (int i = 0; i < mul; i++)
+  {
+    for (int j = 0; j < sll; j++)
+    {
+      debug_print_hex(telegram[i * sll + j]);
     }
-    for(int j=0; j<(Tlength%sll);j++){
-      Serial1.print(vect->ciphertext[mul*sll+j],HEX);
-    }
-    Serial1.println();
-    Serial1.print("\nAuth_Data: ");
-    for(int cnt=0; cnt<17;cnt++)
-        Serial1.print(vect->authdata[cnt],HEX);
-    Serial1.print("\nInit_Vect: ");
-    for(int cnt=0; cnt<12;cnt++)
-        Serial1.print(vect->iv[cnt],HEX);
-    Serial1.print("\nAuth_Tag: ");
-    for(int cnt=0; cnt<12;cnt++)
-        Serial1.print(vect->tag[cnt],HEX);
-    Serial1.print("\nAuth_Data Size: ");
-    Serial1.println(vect->authsize);
-    Serial1.print("Data Size: ");
-    Serial1.println(vect->datasize);
-    Serial1.print("Auth_Tag Size: ");
-    Serial1.println(vect->tagsize);
-    Serial1.print("Init_Vect Size: ");
-    Serial1.println(vect->ivsize);
-    Serial1.println(); }
+    DEBUG_PRINTLN();
+  }
+  for (int j = 0; j < (Tlength % sll); j++)
+  {
+    debug_print_hex(telegram[mul * sll + j]);
+  }
+  DEBUG_PRINTLN();
+}
 
-void print_dsmr() {
-  Serial1.println(identification);
-  Serial1.println(p1_version);
-  Serial1.println(timestamp);
-  Serial1.println(equipment_id);
-  Serial1.println(energy_delivered_tariff1);
-  Serial1.println(energy_returned_tariff1);
-  Serial1.println(reactive_energy_delivered_tariff1);
-  Serial1.println(reactive_energy_returned_tariff1);
-  Serial1.println(power_delivered);
-  Serial1.println(power_returned);
-  Serial1.println(reactive_power_delivered);
-  Serial1.println(reactive_power_returned);
-  Serial1.println(electricity_threshold);
-  Serial1.println(electricity_switch_position);
-  Serial1.println(electricity_failures);
-  Serial1.println(electricity_sags_l1);
-  Serial1.println(electricity_sags_l2);
-  Serial1.println(electricity_sags_l3);
-  Serial1.println(electricity_swells_l1);
-  Serial1.println(electricity_swells_l2);
-  Serial1.println(electricity_swells_l3);
-  Serial1.println(message_short);
-  Serial1.println(message2_long);
-  Serial1.println(message3_long);
-  Serial1.println(message4_long);
-  Serial1.println(message5_long);
-  Serial1.println(current_l1);
-  Serial1.println(current_l2);
-  Serial1.println(current_l3);
+void debug_print_vector(TestVector *vect)
+{
+  DEBUG_PRINTLN("\nEntering debug_print_vector");
+  DEBUG_PRINT("Vector_Name: ");
+  DEBUG_PRINTLN(vect->name);
+  DEBUG_PRINT("Key: ");
+  for (int cnt = 0; cnt < 16; cnt++)
+    debug_print_hex(vect->key[cnt]);
+  DEBUG_PRINT("\nData (Text): ");
+  int mul = (vect->datasize / sll);
+  for (int i = 0; i < mul; i++)
+  {
+    for (int j = 0; j < sll; j++)
+    {
+      debug_print_hex(vect->ciphertext[i * sll + j]);
+    }
+    DEBUG_PRINTLN();
+  }
+  for (int j = 0; j < (Tlength % sll); j++)
+  {
+    debug_print_hex(vect->ciphertext[mul * sll + j]);
+  }
+  DEBUG_PRINT("\nAuth_Data: ");
+  for (int cnt = 0; cnt < 17; cnt++)
+    debug_print_hex(vect->authdata[cnt]);
+  DEBUG_PRINT("\nInit_Vect: ");
+  for (int cnt = 0; cnt < 12; cnt++)
+    debug_print_hex(vect->iv[cnt]);
+  DEBUG_PRINT("\nAuth_Tag: ");
+  for (int cnt = 0; cnt < 12; cnt++)
+    debug_print_hex(vect->tag[cnt]);
+  DEBUG_PRINT("\nAuth_Data Size: ");
+  DEBUG_PRINTLN(vect->authsize);
+  DEBUG_PRINT("Data Size: ");
+  DEBUG_PRINTLN(vect->datasize);
+  DEBUG_PRINT("Auth_Tag Size: ");
+  DEBUG_PRINTLN(vect->tagsize);
+  DEBUG_PRINT("Init_Vect Size: ");
+  DEBUG_PRINTLN(vect->ivsize);
+  DEBUG_PRINTLN();
+}
+
+void debug_print_dsmr()
+{
+  DEBUG_PRINTLN("\nEntering debug_print_dsmr");
+  DEBUG_PRINT("identification: ");
+  DEBUG_PRINTLN(identification);
+  DEBUG_PRINT("p1_version: ");
+  DEBUG_PRINTLN(p1_version);
+  DEBUG_PRINT("timestamp: ");
+  DEBUG_PRINTLN(timestamp);
+  DEBUG_PRINT("equipment_id: ");
+  DEBUG_PRINTLN(equipment_id);
+  DEBUG_PRINT("energy_delivered_tariff1: ");
+  DEBUG_PRINTLN(energy_delivered_tariff1);
+  DEBUG_PRINT("energy_returned_tariff1: ");
+  DEBUG_PRINTLN(energy_returned_tariff1);
+  DEBUG_PRINT("reactive_energy_delivered_tariff1: ");
+  DEBUG_PRINTLN(reactive_energy_delivered_tariff1);
+  DEBUG_PRINT("reactive_energy_returned_tariff1: ");
+  DEBUG_PRINTLN(reactive_energy_returned_tariff1);
+  DEBUG_PRINT("power_delivered: ");
+  DEBUG_PRINTLN(power_delivered);
+  DEBUG_PRINT("power_returned: ");
+  DEBUG_PRINTLN(power_returned);
+  DEBUG_PRINT("reactive_power_delivered: ");
+  DEBUG_PRINTLN(reactive_power_delivered);
+  DEBUG_PRINT("reactive_power_returned: ");
+  DEBUG_PRINTLN(reactive_power_returned);
+  DEBUG_PRINT("electricity_threshold: ");
+  DEBUG_PRINTLN(electricity_threshold);
+  DEBUG_PRINT("electricity_switch_position: ");
+  DEBUG_PRINTLN(electricity_switch_position);
+  DEBUG_PRINT("electricity_failures: ");
+  DEBUG_PRINTLN(electricity_failures);
+  DEBUG_PRINT("electricity_sags_l1: ");
+  DEBUG_PRINTLN(electricity_sags_l1);
+  DEBUG_PRINT("electricity_sags_l2: ");
+  DEBUG_PRINTLN(electricity_sags_l2);
+  DEBUG_PRINT("electricity_sags_l3: ");
+  DEBUG_PRINTLN(electricity_sags_l3);
+  DEBUG_PRINT("electricity_swells_l1: ");
+  DEBUG_PRINTLN(electricity_swells_l1);
+  DEBUG_PRINT("electricity_swells_l2: ");
+  DEBUG_PRINTLN(electricity_swells_l2);
+  DEBUG_PRINT("electricity_swells_l3: ");
+  DEBUG_PRINTLN(electricity_swells_l3);
+  DEBUG_PRINT("message_short: ");
+  DEBUG_PRINTLN(message_short);
+  DEBUG_PRINT("message2_long: ");
+  DEBUG_PRINTLN(message2_long);
+  DEBUG_PRINT("message3_long: ");
+  DEBUG_PRINTLN(message3_long);
+  DEBUG_PRINT("message4_long: ");
+  DEBUG_PRINTLN(message4_long);
+  DEBUG_PRINT("message5_long: ");
+  DEBUG_PRINTLN(message5_long);
+  DEBUG_PRINT("current_l1: ");
+  DEBUG_PRINTLN(current_l1);
+  DEBUG_PRINT("current_l2: ");
+  DEBUG_PRINTLN(current_l2);
+  DEBUG_PRINT("current_l3: ");
+  DEBUG_PRINTLN(current_l3);
+}
+
+/*
+   Need a local yield that that calls yield() and mqttClient.loop()
+   The system yield() routine does not call mqttClient.loop()
+*/
+void local_yield()
+{
+  yield();
+#ifdef USE_MQTT
+  mqttClient.loop();
+#endif
+}
+
+/*
+   Need a local delay calls yield() and mqttClient.loop()
+   The system delay() routine does not call mqttClient.loop()
+*/
+void local_delay(unsigned long millisecs)
+{
+  unsigned long start = millis();
+  local_yield();
+  if (millisecs > 0)
+  {
+    while (elapsed_time(start) < millisecs)
+    {
+      local_yield();
+    }
+  }
+}
+
+/*
+ *  Returns the number of milliseconds elapsed since  start_time_ms.
+ */
+unsigned long elapsed_time(unsigned long start_time_ms)
+{
+  return millis() - start_time_ms;
+}
+
+void debug_print_hex(char x)
+{
+  if (x < 0x10) // add leading 0 if needed
+  {
+    DEBUG_PRINT("0");
+  };
+  DEBUG_PRINT(x, HEX);
 }

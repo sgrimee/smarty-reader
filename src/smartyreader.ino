@@ -654,23 +654,34 @@ bool test_field(char *field2, const char *dmsr_field_id)
 
 void debug_print_raw_data(int Tlength)
 {
+  const int bpl = 22; // bytes per line
   DEBUG_PRINT("Raw length in Byte: ");
   DEBUG_PRINTLN(Tlength);
-  DEBUG_PRINTLN("Raw data: ");
-  int mul = (Tlength / sll);
+  DEBUG_PRINTLN("Raw data for import in smarty_user_config.h:");
+  DEBUG_PRINTLN("const char fake_vector[] = {");
+  int mul = (Tlength / bpl);
   for (int i = 0; i < mul; i++)
   {
-    for (int j = 0; j < sll; j++)
+    DEBUG_PRINT("    ");
+    for (int j = 0; j < bpl; j++)
     {
-      debug_print_hex(telegram[i * sll + j]);
+      DEBUG_PRINT("0x");
+      debug_print_hex(telegram[i * bpl + j]);
+      DEBUG_PRINT(", ");
     }
     DEBUG_PRINTLN();
   }
-  for (int j = 0; j < (Tlength % sll); j++)
+  DEBUG_PRINT("    ");
+  for (int j = 0; j < (Tlength % bpl); j++)
   {
-    debug_print_hex(telegram[mul * sll + j]);
+    DEBUG_PRINT("0x");
+    debug_print_hex(telegram[mul * bpl + j]);
+    if (j < (Tlength % bpl) - 1)
+    {
+      DEBUG_PRINT(", ");
+    }
   }
-  DEBUG_PRINTLN();
+  DEBUG_PRINTLN("};");
 }
 
 void debug_print_vector(TestVector *vect)

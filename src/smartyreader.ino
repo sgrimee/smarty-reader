@@ -41,7 +41,7 @@
 #include <PubSubClient.h>
 #include <string.h>
 
-#include "user_config.h"
+#include "smarty_user_config.h"
 
 // clang-format off
 #ifndef DEBUG
@@ -172,7 +172,7 @@ void setup()
   setup_networking();
 
 #ifdef USE_MQTT
-  mqttClient.setServer(mqtt_server, mqttPort);
+  mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
 #endif
 
   digitalWrite(LED_BUILTIN, HIGH); // Off
@@ -233,7 +233,7 @@ void loop()
     DEBUG_PRINTLN("Message to publish:");
     DEBUG_PRINTLN(msg);
 #ifdef USE_MQTT
-    test = mqttClient.publish(topic, msg);
+    test = mqttClient.publish(MQTT_TOPIC, msg);
 #endif
   }
   else
@@ -286,8 +286,8 @@ void setup_networking()
 #ifdef USE_WIFI_STATIC
   WiFi.config(wemos_ip, gateway_ip, subnet_mask);
 #endif // ifdef STATIC
-  WiFi.hostname(smartyreader_hostname);
-  WiFi.begin(ssid, password);
+  WiFi.hostname(HOSTNAME);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
@@ -308,10 +308,10 @@ void reconnect_mqtt()
   while (!mqttClient.connected())
   {
     DEBUG_PRINT(".");
-    if (mqttClient.connect(clientId))
+    if (mqttClient.connect(MQTT_CLIENT_ID))
     {
       DEBUG_PRINTLN("\nPublishing connection confirmation to mqtt.");
-      mqttClient.publish(topic, "{\"dt\":\"connected\"}");
+      mqttClient.publish(MQTT_TOPIC, "{\"dt\":\"connected\"}");
     }
     else
     {

@@ -1,12 +1,16 @@
 /* Copy this file to user_config.h and customize to your needs. */
 
+#ifndef SMARTY_USER_CONFIG
+#define SMARTY_USER_CONFIG
+
 // Uncomment if debugging requested
 #define DEBUG
 
 // Add wifi credentials
 #define USE_WIFI
-const char ssid[] = "mywifi";
-const char password[] = "mypass";
+#define WIFI_SSID "mywifi"
+#define WIFI_PASSWORD "mypass"
+#define HOSTNAME "Smartyreader"
 
 // Uncomment if you need to set a static IP, otherwise DHCP is used.
 //define USE_WIFI_STATIC
@@ -16,14 +20,13 @@ const char password[] = "mypass";
 // IPAddress subnet_mask(255,255,255,0);
 
 #define USE_MQTT
-const char *mqtt_server = "192.168.1.100";
-const int mqttPort = 1883;
-const char *clientId = "smarty_lam1_p1";
-const char *topic = "lamsmarty";
-const char *smartyreader_hostname = "Smartyreader";
+#define MQTT_SERVER "192.168.1.100"
+#define MQTT_PORT 1883
+#define MQTT_CLIENT_ID "smarty_lam1_p1"
+#define MQTT_TOPIC "lamsmarty"
 
 // Add your decryption key here, obtained from your electricity provider.
-uint8_t key_SM_LAM_1[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0xGG, 0x00,
+uint8_t key_SM_LAM_1[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x00,
                           0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
 
 // Uncomment if you want to use fake data instead of the physical smart meter
@@ -65,3 +68,5 @@ const char fake_vector[] = {
     0x16, 0x7D, 0x22, 0x3E, 0x56, 0xC8, 0x9E, 0xAC, 0x55, 0xD0, 0xD7, 0x7E, 0x4C, 0xDD, 0x44, 0x25, 0xC6, 0x7F, 0xFD, 0xB5, 0x53, 0xFF,
     0xF5, 0x10, 0x86, 0x62, 0x89, 0xB6, 0xEB, 0x0E, 0x5B};
 #endif
+
+#endif // SMARTY_USER_CONFIG

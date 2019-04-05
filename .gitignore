@@ -7,4 +7,5 @@
 .vscode/settings.json
 .vscode/ipch
 
-user_config.h
+*.code-workspace
+smarty_user_config.h

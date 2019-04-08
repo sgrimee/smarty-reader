@@ -8,4 +8,4 @@
 .vscode/ipch
 
 *.code-workspace
-smarty_user_config.h
+smarty_user_config*.h

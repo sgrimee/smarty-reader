@@ -34,14 +34,18 @@
   like CuteCom or CleverTerm to listen to D4.
 */
 
+#include "smarty_user_config.h"
+
 #include <AES.h>
 #include <Crypto.h>
 #include <ESP8266WiFi.h>
 #include <GCM.h>
-#include <PubSubClient.h>
-#include <string.h>
 
-#include "smarty_user_config.h"
+// override mqtt max packet size in the PubSub library
+//#define MQTT_MAX_PACKET_SIZE 512
+#include <PubSubClient.h>
+
+#include <string.h>
 
 // clang-format off
 #ifndef DEBUG
@@ -123,6 +127,7 @@ char *message5_long;
 char *current_l1;
 char *current_l2;
 char *current_l3;
+char *gas_index = "N/A";
 
 const char *id_p1_version = "1-3:0.2.8(";
 const char *id_timestamp = "0-0:1.0.0(";
@@ -151,7 +156,8 @@ const char *id_message4_long = "0-0:96.13.4(";
 const char *id_message5_long = "0-0:96.13.5(";
 const char *id_current_l1 = "1-0:31.7.0(";
 const char *id_current_l2 = "1-0:51.7.0(";
-const char *id_current_l3 = "1-0:71.7const .0(";
+const char *id_current_l3 = "1-0:71.7.0(";
+const char *id_gas_index = "0-1:24.2.1("; // 0-1:24.2.1(101209112500W)(12785.123*m3)
 
 uint8_t telegram[MAX_LINE_LENGTH];
 char buffer[MAX_LINE_LENGTH - 30];
@@ -220,16 +226,15 @@ void loop()
     debug_print_dsmr();
 
     // create a message to post to mqtt
-    snprintf(msg, 128, "{"
-                       "\"dt\":\"%s\","
-                       "\"c1\":\"%s\","
-                       "\"p1\":\"%s\","
-                       "\"pwr\":\"%s\"}",
-
+    snprintf(msg, MQTT_MAX_PACKET_SIZE, "{"
+                                        "\"dt\":\"%s\","
+                                        "\"e1\":\"%s\","
+                                        "\"pwr\":\"%s\","
+                                        "\"gas\":\"%s\"}",
              timestamp,
              energy_delivered_tariff1,
-             energy_returned_tariff1,
-             power_delivered);
+             power_delivered,
+             gas_index);
     DEBUG_PRINTLN("Message to publish:");
     DEBUG_PRINTLN(msg);
 #ifdef USE_MQTT
@@ -407,21 +412,21 @@ void parse_dsmr_string(char *mystring)
     }
     if (test_field(field, id_p1_version))
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       p1_version = field;
       continue;
     }
     result = test_field(field, id_timestamp);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       timestamp = field;
       continue;
     }
     result = test_field(field, id_equipment_id);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       convert_equipment_id(field);
       equipment_id = field;
       continue;
@@ -429,176 +434,183 @@ void parse_dsmr_string(char *mystring)
     result = test_field(field, id_energy_delivered_tariff1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       energy_delivered_tariff1 = field;
       continue;
     }
     result = test_field(field, id_energy_returned_tariff1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       energy_returned_tariff1 = field;
       continue;
     }
     result = test_field(field, id_reactive_energy_delivered_tariff1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       reactive_energy_delivered_tariff1 = field;
       continue;
     }
     result = test_field(field, id_reactive_energy_returned_tariff1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       reactive_energy_returned_tariff1 = field;
       continue;
     }
     result = test_field(field, id_power_delivered);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       power_delivered = field;
       continue;
     }
     result = test_field(field, id_power_returned);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       power_returned = field;
       continue;
     }
     result = test_field(field, id_reactive_power_delivered);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       reactive_power_delivered = field;
       continue;
     }
     result = test_field(field, id_reactive_power_returned);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       reactive_power_returned = field;
       continue;
     }
     result = test_field(field, id_electricity_threshold);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_threshold = field;
       continue;
     }
     result = test_field(field, id_electricity_switch_position);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_switch_position = field;
       continue;
     }
     result = test_field(field, id_electricity_failures);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_failures = field;
       continue;
     }
     result = test_field(field, id_electricity_sags_l1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_sags_l1 = field;
       continue;
     }
     result = test_field(field, id_electricity_sags_l2);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_sags_l2 = field;
       continue;
     }
     result = test_field(field, id_electricity_sags_l3);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_sags_l3 = field;
       continue;
     }
     result = test_field(field, id_electricity_swells_l1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_swells_l1 = field;
       continue;
     }
     result = test_field(field, id_electricity_swells_l2);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_swells_l2 = field;
       continue;
     }
     result = test_field(field, id_electricity_swells_l3);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       electricity_swells_l3 = field;
       continue;
     }
     result = test_field(field, id_message_short);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       message_short = field;
       continue;
     }
     result = test_field(field, id_message2_long);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       message2_long = field;
       continue;
     }
     result = test_field(field, id_message3_long);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       message3_long = field;
       continue;
     }
     result = test_field(field, id_message4_long);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       message4_long = field;
       continue;
     }
     result = test_field(field, id_message5_long);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       message5_long = field;
       continue;
     }
     result = test_field(field, id_current_l1);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       current_l1 = field;
       continue;
     }
     result = test_field(field, id_current_l2);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       current_l2 = field;
       continue;
     }
     result = test_field(field, id_current_l3);
     if (result)
     {
-      replace_field_by_value(field);
+      replace_by_val_in_first_braces(field);
       current_l3 = field;
+      continue;
+    }
+    result = test_field(field, id_gas_index);
+    if (result)
+    {
+      replace_by_val_in_last_braces(field);
+      gas_index = field;
       continue;
     }
   }
@@ -615,12 +627,12 @@ void convert_equipment_id(char *mystring)
 }
 
 /*
-  Replace mystring with the value in parenteses.
+  Replace mystring with the value found in the first set of parentheses.
   e.g. 1-0:3.7.0(00.000) becomes 00.000
 */
-void replace_field_by_value(char *mystring)
+void replace_by_val_in_first_braces(char *mystring)
 {
-  //DEBUG_PRINTLN("Entering replace_field_by_value");
+  //DEBUG_PRINTLN("Entering replace_by_val_in_first_braces");
   int a = strcspn(mystring, "(");
   int b = strcspn(mystring, ")");
   int j = 0;
@@ -630,6 +642,21 @@ void replace_field_by_value(char *mystring)
     j++;
   }
   mystring[j] = 0;
+}
+
+/*
+  Replace mystring with the value found in the *last* set of parentheses.
+  e.g. 0-1:24.2.1(101209112500W)(12785.123*m3) becomes 12785.123*m3
+*/
+void replace_by_val_in_last_braces(char *mystring)
+{
+  //DEBUG_PRINTLN("Entering replace_by_val_in_last_braces");
+  const char start = '(';
+  char *ret;
+  // get pointer to last occurrence of '('
+  ret = strrchr(mystring, start);
+  replace_by_val_in_first_braces(ret);
+  strcpy(mystring, ret);
 }
 
 /*
@@ -787,6 +814,8 @@ void debug_print_dsmr()
   DEBUG_PRINTLN(current_l2);
   DEBUG_PRINT("current_l3: ");
   DEBUG_PRINTLN(current_l3);
+  DEBUG_PRINT("gas index: ");
+  DEBUG_PRINTLN(gas_index);
 }
 
 /*

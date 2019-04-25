@@ -34,41 +34,45 @@
 #include "SmartyMeter.h"
 #include "smarty_helpers.h"
 
-const char *id_p1_version = "1-3:0.2.8(";
-const char *id_timestamp = "0-0:1.0.0(";
-const char *id_equipment_id = "0-0:42.0.0(";
-const char *id_energy_delivered_tariff1 = "1-0:1.8.0(";
-const char *id_energy_returned_tariff1 = "1-0:2.8.0(";
-const char *id_reactive_energy_delivered_tariff1 = "1-0:3.8.0(";
-const char *id_reactive_energy_returned_tariff1 = "1-0:4.8.0(";
-const char *id_power_delivered = "1-0:1.7.0(";
-const char *id_power_returned = "1-0:2.7.0(";
-const char *id_reactive_power_delivered = "1-0:3.7.0(";
-const char *id_reactive_power_returned = "1-0:4.7.0(";
-const char *id_electricity_threshold = "0-0:17.0.0(";
-const char *id_electricity_switch_position = "0-0:96.3.10(";
-const char *id_electricity_failures = "0-0:96.7.21(";
-const char *id_electricity_sags_l1 = "1-0:32.32.0(";
-const char *id_electricity_sags_l2 = "1-0:52.32.0(";
-const char *id_electricity_sags_l3 = "1-0:72.32.0(";
-const char *id_electricity_swells_l1 = "1-0:32.36.0(";
-const char *id_electricity_swells_l2 = "1-0:52.36.0(";
-const char *id_electricity_swells_l3 = "1-0:72.36.0(";
-const char *id_message_short = "0-0:96.13.0(";
-const char *id_message2_long = "0-0:96.13.2(";
-const char *id_message3_long = "0-0:96.13.3(";
-const char *id_message4_long = "0-0:96.13.4(";
-const char *id_message5_long = "0-0:96.13.5(";
-const char *id_current_l1 = "1-0:31.7.0(";
-const char *id_current_l2 = "1-0:51.7.0(";
-const char *id_current_l3 = "1-0:71.7.0(";
-const char *id_gas_index = "0-1:24.2.1("; // 0-1:24.2.1(101209112500W)(12785.123*m3)
+#define OBIS_MATCH_LENGTH 9 // number of characters to match to detect an OBIS record
+#define MAX_ORBIS_SIZE 15
 
-SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin)
+struct dsmr_field_t dsmr[] = {
+    {"p1_version", "1-3:0.2.8", "", ""},
+    {"timestamp", "0-0:1.0.0", "", ""},
+    {"equipment_id", "0-0:42.0.0", "", ""},
+    {"energy_delivered_tariff1", "1-0:1.8.0", "kWh", ""},
+    {"energy_returned_tariff1", "1-0:2.8.0", "kWh", ""},
+    {"reactive_energy_delivered_tariff1", "1-0:3.8.0", "kVArh", ""},
+    {"reactive_energy_returned_tariff1", "1-0:4.8.0", "kVArh", ""},
+    {"power_delivered", "1-0:1.7.0", "kW", ""},
+    {"power_returned", "1-0:2.7.0", "kW", ""},
+    {"reactive_power_delivered", "1-0:3.7.0", "kVAr", ""},
+    {"reactive_power_returned", "1-0:4.7.0", "kVAr", ""},
+    {"electricity_threshold", "0-0:17.0.0", "kVA", ""},
+    {"electricity_switch_position", "0-0:96.3.10", "", ""},
+    {"electricity_failures", "0-0:96.7.21", "", ""},
+    {"electricity_sags_l1", "1-0:32.32.0", "", ""},
+    {"electricity_sags_l2", "1-0:52.32.0", "", ""},
+    {"electricity_sags_l3", "1-0:72.32.0", "", ""},
+    {"electricity_swells_l1", "1-0:32.36.0", "", ""},
+    {"electricity_swells_l2", "1-0:52.36.0", "", ""},
+    {"electricity_swells_l3", "1-0:72.36.0", "", ""},
+    {"message_short", "0-0:96.13.0", "", ""},
+    {"message2_long", "0-0:96.13.2", "", ""},
+    {"message3_long", "0-0:96.13.3", "", ""},
+    {"message4_long", "0-0:96.13.4", "", ""},
+    {"message5_long", "0-0:96.13.5", "", ""},
+    {"current_l1", "1-0:31.7.0", "A", ""},
+    {"current_l2", "1-0:51.7.0", "A", ""},
+    {"current_l3", "1-0:71.7.0", "A", ""},
+    {"gas_index", "0-1:24.2.1", "m3", ""}};
+
+SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decrypt_key(decrypt_key),
+                                                                         _data_request_pin(data_request_pin),
+                                                                         _fake_vector_size(0)
 {
-  _decrypt_key = decrypt_key;
-  _data_request_pin = data_request_pin;
-  _fake_vector_size = 0;
+  num_dsmr_fields = sizeof(dsmr) / sizeof(dsmr_field_t);
 }
 
 void SmartyMeter::setFakeVector(char *fake_vector, int fake_vector_size)
@@ -79,14 +83,13 @@ void SmartyMeter::setFakeVector(char *fake_vector, int fake_vector_size)
 
 void SmartyMeter::begin()
 {
-  DEBUG_PRINTLN("SmartyMeter::begin");
+  //DEBUG_PRINTLN("SmartyMeter::begin");
   pinMode(_data_request_pin, OUTPUT);
   Serial.begin(115200); // Hardware serial connected to smarty
   Serial.setRxBufferSize(1024);
 }
 
-/*  readAndDecodeData
-
+/*  
     Attempts to read data from the meter and decode it. 
     Returns true if successful.
 */
@@ -96,7 +99,6 @@ bool SmartyMeter::readAndDecodeData()
   char buffer[MAX_TELEGRAM_LENGTH - 30];
   Vector Vector_SM;
 
-  DEBUG_PRINTLN("SmartyMeter::readAndDecodeData - about to read telegram");
   int telegram_size = readTelegram(telegram, sizeof(telegram));
   if (telegram_size == 0)
   {
@@ -114,7 +116,6 @@ bool SmartyMeter::readAndDecodeData()
   print_vector(&Vector_SM);
   decrypt_vector_to_buffer(&Vector_SM, buffer, sizeof(buffer));
   parseDsmrString(buffer);
-  printDsmr();
   return true;
 }
 
@@ -147,36 +148,12 @@ int SmartyMeter::readTelegram(uint8_t telegram[], int max_telegram_length)
 
 void SmartyMeter::clearDsmr()
 {
-  identification = "";
-  p1_version = "";
-  timestamp = "";
-  equipment_id = "";
-  energy_delivered_tariff1 = "";
-  energy_returned_tariff1 = "";
-  reactive_energy_delivered_tariff1 = "";
-  reactive_energy_returned_tariff1 = "";
-  power_delivered = "";
-  power_returned = "";
-  reactive_power_delivered = "";
-  reactive_power_returned = "";
-  electricity_threshold = "";
-  electricity_switch_position = "";
-  electricity_failures = "";
-  electricity_sags_l1 = "";
-  electricity_sags_l2 = "";
-  electricity_sags_l3 = "";
-  electricity_swells_l1 = "";
-  electricity_swells_l2 = "";
-  electricity_swells_l3 = "";
-  message_short = "";
-  message2_long = "";
-  message3_long = "";
-  message4_long = "";
-  message5_long = "";
-  current_l1 = "";
-  current_l2 = "";
-  current_l3 = "";
-  gas_index = "()";
+  DEBUG_PRINTLN("About to clear dsmr fields.");
+  for (int i = 0; i < num_dsmr_fields; i++)
+  {
+    dsmr[i].value[0] = 0;
+  }
+  DEBUG_PRINTLN("dsmr fields cleared.");
 }
 
 /*
@@ -186,291 +163,79 @@ void SmartyMeter::parseDsmrString(char *mystring)
 {
   clearDsmr();
 
-  DEBUG_PRINTLN("parseDsmrString: string to parse: ");
-  DEBUG_PRINTLN(mystring);
+  DEBUG_PRINTF("parseDsmrString: string to parse:\n%s\n", mystring);
 
-  bool result;
-  char *field = (char *)"bla";
+  char *line;
+  char orbis[MAX_ORBIS_SIZE + 1];
 
-  identification = strtok(mystring, "\n"); // get the first field
+  strtok(mystring, "\n"); // get the first line
+  while (true)
+  {
+    // process next lines
+    line = strtok(NULL, "\n");
+    if ((line == NULL) || (line[0] == '!'))
+    {
+      break;
+    }
+    //DEBUG_PRINTF("Processing line: %s\n", line);
 
-  while ((field[0] != '!') && (field != NULL))
-  { // walk through other fields
-    field = strtok(NULL, "\n");
-    DEBUG_PRINT("Testing field: ");
-    DEBUG_PRINTLN(field);
-    if (strlen(field) < 10)
+    // Extract orbis code from line
+    int first_open_bracket_pos = strcspn(line, "(");
+    //DEBUG_PRINTF("Bracket pos: %d\n", first_open_bracket_pos);
+    if (first_open_bracket_pos >= (int)strlen(line))
     {
+      //DEBUG_PRINTLN("No bracket in this line, skipping.");
       continue;
     }
-    if (test_field(field, id_p1_version))
+    strncpy(orbis, line, first_open_bracket_pos);
+    orbis[first_open_bracket_pos] = 0;
+
+    //DEBUG_PRINTF("Will try to match %d orbis fields.\n", num_dsmr_fields);
+    for (int i = 0; i < num_dsmr_fields; i++)
     {
-      replace_by_val_in_first_braces(field);
-      p1_version = field;
-      continue;
+      //DEBUG_PRINTF("Comparing extracted orbis %s with orbis %s\n", orbis, dsmr[i].id);
+      if (strcmp(orbis, dsmr[i].id) == 0)
+      {
+        if (strcmp(dsmr[i].name, "gas_index") == 0)
+        {
+          // example 0-1:24.2.1(101209112500W)(12785.123*m3)
+          replace_by_val_in_last_braces(line);
+        }
+        else
+        {
+          // example 1-0:71.7.0(000*A)
+          replace_by_val_in_first_braces(line);
+        }
+        if (strcmp(dsmr[i].name, "equipment_id") == 0)
+        {
+          convert_equipment_id(line);
+        }
+        remove_unit_if_present(line);
+        //DEBUG_PRINTF("Setting dsmr %s with value %s\n", dsmr[i].name, line);
+        strncpy(dsmr[i].value, line, MAX_VALUE_LENGTH);
+        break;
+      }
     }
-    result = test_field(field, id_timestamp);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      timestamp = field;
-      continue;
-    }
-    result = test_field(field, id_equipment_id);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      convert_equipment_id(field);
-      equipment_id = field;
-      continue;
-    }
-    result = test_field(field, id_energy_delivered_tariff1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      energy_delivered_tariff1 = field;
-      continue;
-    }
-    result = test_field(field, id_energy_returned_tariff1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      energy_returned_tariff1 = field;
-      continue;
-    }
-    result = test_field(field, id_reactive_energy_delivered_tariff1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      reactive_energy_delivered_tariff1 = field;
-      continue;
-    }
-    result = test_field(field, id_reactive_energy_returned_tariff1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      reactive_energy_returned_tariff1 = field;
-      continue;
-    }
-    result = test_field(field, id_power_delivered);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      power_delivered = field;
-      continue;
-    }
-    result = test_field(field, id_power_returned);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      power_returned = field;
-      continue;
-    }
-    result = test_field(field, id_reactive_power_delivered);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      reactive_power_delivered = field;
-      continue;
-    }
-    result = test_field(field, id_reactive_power_returned);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      reactive_power_returned = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_threshold);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_threshold = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_switch_position);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_switch_position = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_failures);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_failures = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_sags_l1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_sags_l1 = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_sags_l2);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_sags_l2 = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_sags_l3);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_sags_l3 = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_swells_l1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_swells_l1 = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_swells_l2);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_swells_l2 = field;
-      continue;
-    }
-    result = test_field(field, id_electricity_swells_l3);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      electricity_swells_l3 = field;
-      continue;
-    }
-    result = test_field(field, id_message_short);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      message_short = field;
-      continue;
-    }
-    result = test_field(field, id_message2_long);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      message2_long = field;
-      continue;
-    }
-    result = test_field(field, id_message3_long);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      message3_long = field;
-      continue;
-    }
-    result = test_field(field, id_message4_long);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      message4_long = field;
-      continue;
-    }
-    result = test_field(field, id_message5_long);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      message5_long = field;
-      continue;
-    }
-    result = test_field(field, id_current_l1);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      current_l1 = field;
-      continue;
-    }
-    result = test_field(field, id_current_l2);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      current_l2 = field;
-      continue;
-    }
-    result = test_field(field, id_current_l3);
-    if (result)
-    {
-      replace_by_val_in_first_braces(field);
-      current_l3 = field;
-      continue;
-    }
-    // result = test_field(field, id_gas_index);
-    // if (result)
-    // {
-    //   replace_by_val_in_last_braces(field);
-    //   gas_index = field;
-    //   continue;
-    // }
   }
   DEBUG_PRINTLN("Exiting parseDsmrString");
 }
 
 void SmartyMeter::printDsmr()
 {
-  DEBUG_PRINTLN("\nEntering printDsmr");
-  DEBUG_PRINT("identification: ");
-  DEBUG_PRINTLN(identification);
-  DEBUG_PRINT("p1_version: ");
-  DEBUG_PRINTLN(p1_version);
-  DEBUG_PRINT("timestamp: ");
-  DEBUG_PRINTLN(timestamp);
-  DEBUG_PRINT("equipment_id: ");
-  DEBUG_PRINTLN(equipment_id);
-  DEBUG_PRINT("energy_delivered_tariff1: ");
-  DEBUG_PRINTLN(energy_delivered_tariff1);
-  DEBUG_PRINT("energy_returned_tariff1: ");
-  DEBUG_PRINTLN(energy_returned_tariff1);
-  DEBUG_PRINT("reactive_energy_delivered_tariff1: ");
-  DEBUG_PRINTLN(reactive_energy_delivered_tariff1);
-  DEBUG_PRINT("reactive_energy_returned_tariff1: ");
-  DEBUG_PRINTLN(reactive_energy_returned_tariff1);
-  DEBUG_PRINT("power_delivered: ");
-  DEBUG_PRINTLN(power_delivered);
-  DEBUG_PRINT("power_returned: ");
-  DEBUG_PRINTLN(power_returned);
-  DEBUG_PRINT("reactive_power_delivered: ");
-  DEBUG_PRINTLN(reactive_power_delivered);
-  DEBUG_PRINT("reactive_power_returned: ");
-  DEBUG_PRINTLN(reactive_power_returned);
-  DEBUG_PRINT("electricity_threshold: ");
-  DEBUG_PRINTLN(electricity_threshold);
-  DEBUG_PRINT("electricity_switch_position: ");
-  DEBUG_PRINTLN(electricity_switch_position);
-  DEBUG_PRINT("electricity_failures: ");
-  DEBUG_PRINTLN(electricity_failures);
-  DEBUG_PRINT("electricity_sags_l1: ");
-  DEBUG_PRINTLN(electricity_sags_l1);
-  DEBUG_PRINT("electricity_sags_l2: ");
-  DEBUG_PRINTLN(electricity_sags_l2);
-  DEBUG_PRINT("electricity_sags_l3: ");
-  DEBUG_PRINTLN(electricity_sags_l3);
-  DEBUG_PRINT("electricity_swells_l1: ");
-  DEBUG_PRINTLN(electricity_swells_l1);
-  DEBUG_PRINT("electricity_swells_l2: ");
-  DEBUG_PRINTLN(electricity_swells_l2);
-  DEBUG_PRINT("electricity_swells_l3: ");
-  DEBUG_PRINTLN(electricity_swells_l3);
-  DEBUG_PRINT("message_short: ");
-  DEBUG_PRINTLN(message_short);
-  DEBUG_PRINT("message2_long: ");
-  DEBUG_PRINTLN(message2_long);
-  DEBUG_PRINT("message3_long: ");
-  DEBUG_PRINTLN(message3_long);
-  DEBUG_PRINT("message4_long: ");
-  DEBUG_PRINTLN(message4_long);
-  DEBUG_PRINT("message5_long: ");
-  DEBUG_PRINTLN(message5_long);
-  DEBUG_PRINT("current_l1: ");
-  DEBUG_PRINTLN(current_l1);
-  DEBUG_PRINT("current_l2: ");
-  DEBUG_PRINTLN(current_l2);
-  DEBUG_PRINT("current_l3: ");
-  DEBUG_PRINTLN(current_l3);
-  // DEBUG_PRINT("gas index: ");
-  // DEBUG_PRINTLN(gas_index);
+  DEBUG_PRINTLN("\nSmartyMeter::printDsmr:");
+  for (int i = 0; i < num_dsmr_fields; i++)
+  {
+    if (dsmr[i].value == NULL)
+    {
+      DEBUG_PRINTF("Skipping %s because was not set.\n", dsmr[i].name);
+      continue;
+    }
+    delay(10);
+    DEBUG_PRINTF("%12s | %33s | %s %s\n",
+                 dsmr[i].id,
+                 dsmr[i].name,
+                 dsmr[i].value,
+                 dsmr[i].unit);
+  }
+  DEBUG_PRINTLN();
 }

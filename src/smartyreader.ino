@@ -37,10 +37,12 @@
 #include "smarty_user_config.h"
 #include "debug_helpers.h"
 #include "SmartyMeter.h"
+#include "mqtt_watchdog.h"
 
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
+#include "Arduino.h"
 #include <string.h>
 
 #define LOOP_DELAY 59000 // 59 seconds
@@ -61,7 +63,6 @@ PubSubClient mqttClient(espClient);
 #warning Using fake smart meter!
 #endif
 
-char mqtt_msg[128];
 SmartyMeter smarty(decrypt_key, D3);
 
 /* 
@@ -99,40 +100,23 @@ void loop()
   if (!mqttClient.connected())
   {
     reconnect_mqtt();
+    publish_units_mqtt(smarty, mqttClient);
   }
   mqttClient.loop();
-#endif // USE_MQTT
+#endif
   bool data_available = smarty.readAndDecodeData();
   if (data_available)
   {
-    DEBUG_PRINTLN("loop: data received.");
-    //create a message to post to mqtt
-    snprintf(mqtt_msg, MQTT_MAX_PACKET_SIZE, "{"
-                                             "\"dt\":\"%s\","
-                                             "\"e1\":\"%s\","
-                                             "\"pwr\":\"%s\","
-                                             "\"gas\":\"%s\"}",
-             smarty.timestamp,
-             smarty.energy_delivered_tariff1,
-             smarty.power_delivered,
-             smarty.gas_index);
-    DEBUG_PRINTLN("Message to publish:");
-    DEBUG_PRINTLN(mqtt_msg);
-#ifdef USE_MQTT
-    mqttClient.publish(MQTT_TOPIC, mqtt_msg);
-#endif // USE_MQTT
+    //delay(100);
+    smarty.printDsmr();
+    mqtt_delay(500, mqttClient);
+    publish_dsmr_mqtt(smarty, mqttClient);
   }
-  else
-  {
-    DEBUG_PRINTLN("loop: no data received");
-  }
-
   DEBUG_PRINTLN("End of loop, waiting");
-  delay(LOOP_DELAY);
+  mqtt_delay(LOOP_DELAY, mqttClient);
 }
 
 /* Networking */
-
 void setup_networking()
 {
 #ifdef USE_WIFI
@@ -141,9 +125,6 @@ void setup_networking()
   WiFi.disconnect();
   WiFi.mode(WIFI_STA);
   delay(200);
-#ifdef USE_WIFI_STATIC
-  WiFi.config(wemos_ip, gateway_ip, subnet_mask);
-#endif // USE_WIFI_STATIC
   WiFi.hostname(HOSTNAME);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED)
@@ -151,6 +132,9 @@ void setup_networking()
     delay(500);
     DEBUG_PRINT(".");
   }
+#ifdef USE_WIFI_STATIC
+  WiFi.config(wemos_ip, gateway_ip, subnet_mask);
+#endif // USE_WIFI_STATIC
   DEBUG_PRINTLN("\nWiFi connected");
   DEBUG_PRINTLN("IP address: ");
   DEBUG_PRINTLN(WiFi.localIP());
@@ -160,9 +144,10 @@ void setup_networking()
 
 /* MQTT */
 
+#ifdef USE_MQTT
+
 void reconnect_mqtt()
 {
-#ifdef USE_MQTT
   DEBUG_PRINTLN("Connecting to mqtt");
   while (!mqttClient.connected())
   {
@@ -170,12 +155,53 @@ void reconnect_mqtt()
     if (mqttClient.connect(MQTT_CLIENT_ID))
     {
       DEBUG_PRINTLN("\nPublishing connection confirmation to mqtt.");
-      mqttClient.publish(MQTT_TOPIC, "{\"dt\":\"connected\"}");
+      mqttClient.publish(MQTT_TOPIC "/status", "connected");
     }
     else
     {
       delay(5000);
     }
   }
-#endif
 }
+
+/*
+  Publish dsmr values (only) to mqtt. Done at each loop.
+*/
+void publish_dsmr_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
+{
+  DEBUG_PRINTLN("Entering publish_dmsr_mqtt");
+  char topic[60];
+  for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
+  {
+    if (dsmr[i].value[0] == 0)
+    {
+      DEBUG_PRINTF("Ignoring mqtt publish of value for %s\n", dsmr[i].name);
+      continue;
+    }
+    sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[i].name);
+    DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].value);
+    theClient.publish(topic, dsmr[i].value);
+  }
+}
+
+/*
+  Publish the units to mqtt. Meant to be called just once after connecting.
+*/
+void publish_units_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
+{
+  DEBUG_PRINTLN("Entering publish_units_mqtt");
+  char topic[60];
+  for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
+  {
+    if (dsmr[i].unit[0] == 0)
+    {
+      DEBUG_PRINTF("Ignoring mqtt publish of unit for %s\n", dsmr[i].name);
+      continue;
+    }
+    sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
+    DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].unit);
+    theClient.publish(topic, dsmr[i].unit);
+  }
+}
+
+#endif

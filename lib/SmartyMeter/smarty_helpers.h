@@ -25,7 +25,7 @@ void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size);
 void convert_equipment_id(char *mystring);
 void replace_by_val_in_first_braces(char *mystring);
 void replace_by_val_in_last_braces(char *mystring);
-bool test_field(char *field2, const char *dmsr_field_id);
+void remove_unit_if_present(char *mystring);
 void print_vector(Vector *vect);
 void print_hex(char x);
 

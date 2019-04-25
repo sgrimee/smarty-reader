@@ -8,15 +8,12 @@
 #include <GCM.h>
 
 /*
-      print_telegram
-
       Print hex dump on debug channel, formatted for use as 'fake_vector'
 */
 void print_telegram(uint8_t telegram[], int telegram_size)
 {
     const int bpl = 22; // bytes per line
-    DEBUG_PRINT("print_telegram - length: ");
-    DEBUG_PRINTLN(telegram_size);
+    DEBUG_PRINTF("print_telegram - length: %d", telegram_size);
     DEBUG_PRINTLN("Raw data for import in smarty_user_config.h:");
     DEBUG_PRINTLN("const char fake_vector[] = {");
     int mul = (telegram_size / bpl);
@@ -41,11 +38,10 @@ void print_telegram(uint8_t telegram[], int telegram_size)
             DEBUG_PRINT(", ");
         }
     }
-    DEBUG_PRINTLN("};");
+    DEBUG_PRINTLN("};\n");
 }
 
-/*  init_vector
-
+/*  
     Decode the raw data and fill the vector
 */
 void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_t *key_SM)
@@ -76,8 +72,7 @@ void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_
     DEBUG_PRINTLN("Exiting init_vector");
 }
 
-/* decrypt_vector_to_buffer
-
+/* 
   Decrypt text in the vector and put it in the buffer
 */
 void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
@@ -88,7 +83,7 @@ void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
     gcmaes128 = new GCM<AES128>();
     size_t posn, len;
     size_t inc = vect->datasize;
-    memset(buffer, 0xBA, buffer_size);
+    memset(buffer, 0, buffer_size); // ensure final string will be zero terminated
     gcmaes128->setKey(vect->key, gcmaes128->keySize());
     gcmaes128->setIV(vect->iv, vect->ivsize);
     for (posn = 0; posn < vect->datasize; posn += inc)
@@ -103,7 +98,8 @@ void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
 }
 
 void convert_equipment_id(char *mystring)
-{ //coded in HEX
+{
+    // coded in HEX
     //DEBUG_PRINTLN("Entering convert_equipment_id");
     int len = strlen(mystring);
     for (int i = 0; i < len / 2; i++)
@@ -136,32 +132,23 @@ void replace_by_val_in_first_braces(char *mystring)
 void replace_by_val_in_last_braces(char *mystring)
 {
     //DEBUG_PRINTLN("Entering replace_by_val_in_last_braces");
-    const char start = '(';
-    char *ret;
     // get pointer to last occurrence of '('
-    ret = strrchr(mystring, start);
+    char *ret = strrchr(mystring, '(');
     replace_by_val_in_first_braces(ret);
     strcpy(mystring, ret);
 }
 
 /*
-  Return true if the first cmp_len characters of the two fields are the same, false otherwise.
+  Remove all characters after a *, if present.
+  12785.123*m3 becomes 12785.123
 */
-bool test_field(char *field2, const char *dmsr_field_id)
+void remove_unit_if_present(char *mystring)
 {
-    const int cmp_len = 10;
-    if (strlen(field2) < cmp_len)
-    {
-        DEBUG_PRINT("Trying to compare a field that is too short: ");
-        DEBUG_PRINTLN(field2);
-        return false;
-    }
-    for (int i = 0; i < cmp_len; i++)
-    {
-        if (field2[i] != dmsr_field_id[i])
-            return false;
-    }
-    return true;
+    //DEBUG_PRINTLN("Entering remove_unit_if_present");
+    char *pos = strchr(mystring, '*');
+    if (pos)
+        // replace character with terminating null
+        *pos = 0;
 }
 
 void print_vector(Vector *vect)
@@ -169,8 +156,7 @@ void print_vector(Vector *vect)
     const int sll = 50; // length of a line if printing serial raw data
 
     DEBUG_PRINTLN("\nEntering print_vector");
-    DEBUG_PRINT("Vector_Name: ");
-    DEBUG_PRINTLN(vect->name);
+    DEBUG_PRINTF("Vector_Name: %s\n", vect->name);
     DEBUG_PRINT("Key: ");
     for (int cnt = 0; cnt < 16; cnt++)
         print_hex(vect->key[cnt]);
@@ -197,14 +183,10 @@ void print_vector(Vector *vect)
     DEBUG_PRINT("\nAuth_Tag: ");
     for (int cnt = 0; cnt < 12; cnt++)
         print_hex(vect->tag[cnt]);
-    DEBUG_PRINT("\nAuth_Data Size: ");
-    DEBUG_PRINTLN(vect->authsize);
-    DEBUG_PRINT("Data Size: ");
-    DEBUG_PRINTLN(vect->datasize);
-    DEBUG_PRINT("Auth_Tag Size: ");
-    DEBUG_PRINTLN(vect->tagsize);
-    DEBUG_PRINT("Init_Vect Size: ");
-    DEBUG_PRINTLN(vect->ivsize);
+    DEBUG_PRINTF("\nAuth_Data Size: %d\n", vect->authsize);
+    DEBUG_PRINTF("Data Size: %d\n", vect->datasize);
+    DEBUG_PRINTF("Auth_Tag Size: %d\n", vect->tagsize);
+    DEBUG_PRINTF("Init_Vect Size: %d\n", vect->ivsize);
     DEBUG_PRINTLN();
 }
 

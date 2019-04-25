@@ -33,6 +33,19 @@
 
 #include "Arduino.h"
 
+#define MAX_VALUE_LENGTH 33
+
+// Dutch smart meter requirements
+struct dsmr_field_t
+{
+  const char *name;
+  const char *id;
+  const char *unit;
+  char value[MAX_VALUE_LENGTH];
+};
+
+extern struct dsmr_field_t dsmr[];
+
 class SmartyMeter
 {
 public:
@@ -41,37 +54,7 @@ public:
   void begin();
   bool readAndDecodeData();
   void printDsmr();
-
-  char *identification;
-  char *p1_version;
-  char *timestamp;
-  char *equipment_id;
-  char *energy_delivered_tariff1;
-  char *energy_returned_tariff1;
-  char *reactive_energy_delivered_tariff1;
-  char *reactive_energy_returned_tariff1;
-  char *power_delivered;
-  char *power_returned;
-  char *reactive_power_delivered;
-  char *reactive_power_returned;
-  char *electricity_threshold;
-  char *electricity_switch_position;
-  char *electricity_failures;
-  char *electricity_sags_l1;
-  char *electricity_sags_l2;
-  char *electricity_sags_l3;
-  char *electricity_swells_l1;
-  char *electricity_swells_l2;
-  char *electricity_swells_l3;
-  char *message_short;
-  char *message2_long;
-  char *message3_long;
-  char *message4_long;
-  char *message5_long;
-  char *current_l1;
-  char *current_l2;
-  char *current_l3;
-  char *gas_index;
+  int num_dsmr_fields;
 
 private:
   uint8_t *_decrypt_key;

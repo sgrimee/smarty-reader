@@ -4,7 +4,7 @@ Read smart Luxembourgish electricity and gaz counter values with ESP8266.
 
 # Overview
 
-<img src="http://weigu.lu/microcontroller/smartyreader/png/pcb_wemos3.png" alt="drawing" width="200"/>
+<img src="http://weigu.lu/microcontroller/smartyreader/png/smartyreader_1_800.png"  width="150"/>
 
 In Luxembourg, electricty and gas counters are being replaced with smart counters that allow the provider to remotely measure consumption values. A special port is provided to allow the end-user to capture the data, for example for integration with home automation systems.
 

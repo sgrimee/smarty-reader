@@ -225,13 +225,8 @@ void SmartyMeter::printDsmr()
   DEBUG_PRINTLN("\nSmartyMeter::printDsmr:");
   for (int i = 0; i < num_dsmr_fields; i++)
   {
-    if (dsmr[i].value == NULL)
-    {
-      DEBUG_PRINTF("Skipping %s because was not set.\n", dsmr[i].name);
-      continue;
-    }
-    delay(10);
-    DEBUG_PRINTF("%12s | %33s | %s %s\n",
+    //delay(10);
+    DEBUG_PRINTF("%12s | %33s | %s (%s)\n",
                  dsmr[i].id,
                  dsmr[i].name,
                  dsmr[i].value,

@@ -96,6 +96,12 @@ void setup()
 void loop()
 {
   DEBUG_PRINTLN("------------------");
+
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    DEBUG_PRINTLN("Wifi is disconnected!");
+    setup_networking();
+  }
 #ifdef USE_MQTT
   if (!mqttClient.connected())
   {

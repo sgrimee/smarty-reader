@@ -3,7 +3,7 @@
 #ifndef smarty_helpers_h
 #define smarty_helpers_h
 
-#define MAX_TELEGRAM_LENGTH 1024
+#define MAX_TELEGRAM_LENGTH 1536
 
 struct Vector
 {

@@ -37,10 +37,12 @@
 #include "smarty_user_config.h"
 #include "debug_helpers.h"
 #include "SmartyMeter.h"
-#include "mqtt_watchdog.h"
 
 #include <ESP8266WiFi.h>
+
+#define MQTT_MAX_PACKET_SIZE 1024
 #include <PubSubClient.h>
+#include "mqtt_watchdog.h"
 
 #include "Arduino.h"
 #include <string.h>
@@ -111,6 +113,7 @@ void loop()
   mqttClient.loop();
 #endif
   bool data_available = smarty.readAndDecodeData();
+
   if (data_available)
   {
     //delay(100);
@@ -176,12 +179,14 @@ void reconnect_mqtt()
 void publish_dsmr_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
 {
   DEBUG_PRINTLN("Entering publish_dmsr_mqtt");
-  char topic[60];
+  char topic[70];
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {
     sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].value);
-    theClient.publish(topic, dsmr[i].value);
+    DEBUG_PRINTF("Publishing topic %s with value %s.\n", topic, dsmr[i].value);
+    if (! theClient.publish(topic, dsmr[i].value)) {
+      DEBUG_PRINTLN("Failed to publish dmsr field.");
+    };
   }
 }
 
@@ -191,7 +196,7 @@ void publish_dsmr_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
 void publish_units_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
 {
   DEBUG_PRINTLN("Entering publish_units_mqtt");
-  char topic[60];
+  char topic[70];
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {
     if (dsmr[i].unit[0] == 0)
@@ -201,7 +206,9 @@ void publish_units_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
     }
     sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
     DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].unit);
-    theClient.publish(topic, dsmr[i].unit, true); // retained
+    if (! theClient.publish(topic, dsmr[i].unit, true)) {
+      DEBUG_PRINTLN("Failed to publish unit");
+    }; // retained
   }
 }
 

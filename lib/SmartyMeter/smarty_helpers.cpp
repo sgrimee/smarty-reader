@@ -51,8 +51,10 @@ void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_
     for (int i = 0; i < 16; i++)
         vect->key[i] = key_SM[i];
     uint16_t Data_Length = uint16_t(telegram[11]) * 256 + uint16_t(telegram[12]) - 17; // get length of data
-    if (Data_Length > MAX_TELEGRAM_LENGTH)
+    if (Data_Length > MAX_TELEGRAM_LENGTH) {
+        DEBUG_PRINTLN("WARNING: data shortened to MAX_TELEGRAM_LENGTH");
         Data_Length = MAX_TELEGRAM_LENGTH;
+    }
     for (int i = 0; i < Data_Length; i++)
         vect->ciphertext[i] = telegram[i + 18];
     uint8_t AuthData[] = {0x30, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,

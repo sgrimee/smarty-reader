@@ -34,164 +34,178 @@
   like CuteCom or CleverTerm to listen to D4.
 */
 
-#include "smarty_user_config.h"
-#include "debug_helpers.h"
-#include "SmartyMeter.h"
-#include "mqtt_watchdog.h"
-
-#include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-
 #include "Arduino.h"
 #include <string.h>
 
-#define LOOP_DELAY 59000 // 59 seconds
+#include <ESP8266WiFi.h>
+#include <Ticker.h>
+#include <AsyncMqttClient.h>
 
-#ifdef USE_WIFI
-WiFiClient espClient;
-#else
-#warning Wifi is disabled
-#endif
+#include "smarty_user_config.h"
+#include "debug_helpers.h"
+#include "SmartyMeter.h"
 
-#ifdef USE_MQTT
-PubSubClient mqttClient(espClient);
-#else
-#warning MQTT is disabled!
-#endif
+#define READ_SMARTY_EVERY_S 59 // seconds
+#define DATA_REQUEST_PIN D3
+
+Ticker mqttReconnectTimer;
+Ticker wifiReconnectTimer;
+Ticker smartyDataReadTimer;
+
+WiFiEventHandler wifiConnectHandler;
+WiFiEventHandler wifiDisconnectHandler;
+
+AsyncMqttClient mqttClient;
 
 #ifdef USE_FAKE_SMART_METER
 #warning Using fake smart meter!
 #endif
 
-SmartyMeter smarty(decrypt_key, D3);
+SmartyMeter smarty(decrypt_key, DATA_REQUEST_PIN);
 
-/* 
-    Arduino setup
-*/
+
+// MQTT
+
+void connectToMqtt() {
+  DEBUG_PRINTLN("Connecting to MQTT...");
+  mqttClient.connect();
+}
+
+void onMqttConnect(bool sessionPresent) {
+  DEBUG_PRINTLN("Connected to MQTT.");
+  DEBUG_PRINT("Session present: ");
+  DEBUG_PRINTLN(sessionPresent);
+  publish_units_mqtt(smarty, mqttClient);
+}
+
+void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
+  DEBUG_PRINTLN("Disconnected from MQTT.");
+
+  if (WiFi.isConnected()) {
+    mqttReconnectTimer.once(2, connectToMqtt);
+  }
+}
+
+void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
+  DEBUG_PRINTLN("Publish received.");
+  DEBUG_PRINT("  topic: ");
+  DEBUG_PRINTLN(topic);
+  DEBUG_PRINT("  qos: ");
+  DEBUG_PRINTLN(properties.qos);
+  DEBUG_PRINT("  dup: ");
+  DEBUG_PRINTLN(properties.dup);
+  DEBUG_PRINT("  retain: ");
+  DEBUG_PRINTLN(properties.retain);
+  DEBUG_PRINT("  len: ");
+  DEBUG_PRINTLN(len);
+  DEBUG_PRINT("  index: ");
+  DEBUG_PRINTLN(index);
+  DEBUG_PRINT("  total: ");
+  DEBUG_PRINTLN(total);
+}
+
+void onMqttPublish(uint16_t packetId) {
+  DEBUG_PRINTLN("Publish acknowledged.");
+  DEBUG_PRINT("  packetId: ");
+  DEBUG_PRINTLN(packetId);
+}
+
+
+// WIFI
+
+void connectToWifi() {
+  DEBUG_PRINTLN("Connecting to Wi-Fi...");
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+}
+
+void onWifiConnect(const WiFiEventStationModeGotIP& event) {
+  DEBUG_PRINTLN("Connected to Wi-Fi.");
+  connectToMqtt();
+
+  smartyDataReadTimer.attach(READ_SMARTY_EVERY_S, read_smarty_data);
+}
+
+void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
+  DEBUG_PRINTLN("Disconnected from Wi-Fi.");
+  mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
+  smartyDataReadTimer.detach(); // ensure we don't read smarty data if wifi is disconnected
+  wifiReconnectTimer.once(2, connectToWifi);
+}
+
+
+// Initial setup
+//
 void setup()
 {
-  delay(1000);
+  delay(500);
   pinMode(LED_BUILTIN, OUTPUT);   // Initialize outputs
   digitalWrite(LED_BUILTIN, LOW); // On
   DEBUG_BEGIN(115200);            // transmit-only UART for debugging on D4 (LED!)
-  DEBUG_PRINTLN("\nSerial is working.");
-  setup_networking();
+  DEBUG_PRINTLN("\nSerial debug is working.");
+  
+  wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
+  wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
 
-#ifdef USE_MQTT
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onDisconnect(onMqttDisconnect);
+  mqttClient.onMessage(onMqttMessage);
+  mqttClient.onPublish(onMqttPublish);
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
-#endif // USE_MQTT
+
+  connectToWifi();
 
 #ifdef USE_FAKE_SMART_METER
   smarty.setFakeVector((char *)fake_vector, sizeof(fake_vector));
 #endif
   smarty.begin();
-
+  
   digitalWrite(LED_BUILTIN, HIGH); // Off
-  delay(2000);
 }
 
-/*  
-    Arduino main loop 
-*/
-void loop()
-{
-  DEBUG_PRINTLN("------------------");
 
-  if (WiFi.status() != WL_CONNECTED)
+void read_smarty_data()
+{
+  DEBUG_PRINTLN("\n------- Reading from Smarty");
+  if (smarty.readAndDecodeData())
   {
-    DEBUG_PRINTLN("Wifi is disconnected!");
-    setup_networking();
-  }
-#ifdef USE_MQTT
-  if (!mqttClient.connected())
-  {
-    reconnect_mqtt();
-    publish_units_mqtt(smarty, mqttClient);
-  }
-  mqttClient.loop();
-#endif
-  bool data_available = smarty.readAndDecodeData();
-  if (data_available)
-  {
-    //delay(100);
     smarty.printDsmr();
-    mqtt_delay(500, mqttClient);
     publish_dsmr_mqtt(smarty, mqttClient);
   }
-  DEBUG_PRINTLN("End of loop, waiting");
-  mqtt_delay(LOOP_DELAY, mqttClient);
+  DEBUG_PRINTLN("Done reading.");
 }
 
-/* Networking */
-void setup_networking()
+// Main loop
+//
+void loop()
 {
-#ifdef USE_WIFI
-  DEBUG_PRINTLN("Entering WiFi setup.");
-  WiFi.softAPdisconnect(); // to eliminate Hotspot
-  WiFi.disconnect();
-  WiFi.mode(WIFI_STA);
-  delay(200);
-  WiFi.hostname(HOSTNAME);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED)
-  {
-    delay(500);
-    DEBUG_PRINT(".");
-  }
-#ifdef USE_WIFI_STATIC
-  WiFi.config(wemos_ip, gateway_ip, subnet_mask);
-#endif // USE_WIFI_STATIC
-  DEBUG_PRINTLN("\nWiFi connected");
-  DEBUG_PRINTLN("IP address: ");
-  DEBUG_PRINTLN(WiFi.localIP());
-  randomSeed(micros());
-#endif // USE_WIFI
+  // DEBUG_PRINT(".");
+  // delay(100);
 }
 
-/* MQTT */
-
-#ifdef USE_MQTT
-
-void reconnect_mqtt()
-{
-  DEBUG_PRINTLN("Connecting to mqtt");
-  while (!mqttClient.connected())
-  {
-    DEBUG_PRINT(".");
-    if (mqttClient.connect(MQTT_CLIENT_ID))
-    {
-      DEBUG_PRINTLN("\nPublishing connection confirmation to mqtt.");
-      mqttClient.publish(MQTT_TOPIC "/status", "connected");
-    }
-    else
-    {
-      delay(5000);
-    }
-  }
-}
 
 /*
-  Publish dsmr values (only) to mqtt. Done at each loop.
+  Publish dsmr values (no units) to mqtt. 
 */
-void publish_dsmr_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
+void publish_dsmr_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
 {
   DEBUG_PRINTLN("Entering publish_dmsr_mqtt");
-  char topic[60];
+  char topic[70];
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {
     sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].value);
-    theClient.publish(topic, dsmr[i].value);
+    DEBUG_PRINTF("Publishing topic %s with value %s.\n", topic, dsmr[i].value);
+    theClient.publish(topic, 0, false, dsmr[i].value);
   }
+  DEBUG_PRINTLN("Exiting publish_dmsr_mqtt");
 }
 
 /*
   Publish the units to mqtt. Meant to be called just once after connecting.
 */
-void publish_units_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
+void publish_units_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
 {
   DEBUG_PRINTLN("Entering publish_units_mqtt");
-  char topic[60];
+  char topic[70];
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {
     if (dsmr[i].unit[0] == 0)
@@ -201,8 +215,6 @@ void publish_units_mqtt(SmartyMeter &theSmarty, PubSubClient &theClient)
     }
     sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
     DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].unit);
-    theClient.publish(topic, dsmr[i].unit, true); // retained
+    theClient.publish(topic, 0, true, dsmr[i].unit); 
   }
 }
-
-#endif

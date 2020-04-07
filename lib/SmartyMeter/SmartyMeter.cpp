@@ -50,7 +50,12 @@ struct dsmr_field_t dsmr[] = {
     {"reactive_power_delivered", "1-0:3.7.0", "kVAr", ""},
     {"reactive_power_returned", "1-0:4.7.0", "kVAr", ""},
     {"electricity_threshold", "0-0:17.0.0", "kVA", ""},
+    {"inst_apparent_import_power", "1-0:9.7.0", "kVA", ""},
+    {"inst_apparent_export_power", "1-0:10.7.0", "kVA", ""},
+    {"limiter_current_monitor", "1-1:31.4.0", "A", ""},
     {"electricity_switch_position", "0-0:96.3.10", "", ""},
+    {"breaker_control_state_1", "0-1:96.3.10", "", ""},
+    {"breaker_control_state_2", "0-2:96.3.10", "", ""},
     {"electricity_failures", "0-0:96.7.21", "", ""},
     {"electricity_sags_l1", "1-0:32.32.0", "", ""},
     {"electricity_sags_l2", "1-0:52.32.0", "", ""},
@@ -63,32 +68,24 @@ struct dsmr_field_t dsmr[] = {
     {"message3_long", "0-0:96.13.3", "", ""},
     {"message4_long", "0-0:96.13.4", "", ""},
     {"message5_long", "0-0:96.13.5", "", ""},
-    {"current_l1", "1-0:31.7.0", "A", ""},
-    {"current_l2", "1-0:51.7.0", "A", ""},
-    {"current_l3", "1-0:71.7.0", "A", ""},
-    {"gas_index", "0-1:24.2.1", "m3", ""}};
-
-// These fields were seen on Julien's counter with a most recent fw and are not parsed yet
-// 1-0:9.7.0(00.579*kVA)
-// 1-0:10.7.0(00.000*kVA)
-// 1-1:31.4.0(040*A)(-040*A)
-// 0-1:96.3.10(0)
-// 0-2:96.3.10(0)
-// 1-0:32.7.0(230.0*V)
-// 1-0:52.7.0(232.0*V)
-// 1-0:72.7.0(230.0*V)
-// 1-0:21.7.0(00.042*kW)
-// 1-0:41.7.0(00.501*kW)
-// 1-0:61.7.0(00.000*kW)
-// 1-0:22.7.0(00.000*kW)
-// 1-0:42.7.0(00.000*kW)
-// 1-0:62.7.0(00.000*kW)
-// 1-0:23.7.0(00.000*kvar)
-// 1-0:43.7.0(00.000*kvar)
-// 1-0:63.7.0(00.000*kvar)
-// 1-0:24.7.0(00.000*kvar)
-// 1-0:44.7.0(00.000*kvar)
-// 1-0:64.7.0(00.000*kvar)
+    {"inst_phase_volt_l1", "1-0:32.7.0", "V", ""},
+    {"inst_phase_volt_l2", "1-0:52.7.0", "V", ""},
+    {"inst_phase_volt_l3", "1-0:72.7.0", "V", ""},
+    {"inst_phase_current_l1", "1-0:31.7.0", "A", ""},
+    {"inst_phase_current_l2", "1-0:51.7.0", "A", ""},
+    {"inst_phase_current_l3", "1-0:71.7.0", "A", ""},
+    {"inst_active_power_p_plus_l1", "1-0:21.7.0", "kW", ""},
+    {"inst_active_power_p_plus_l2", "1-0:41.7.0", "kW", ""},
+    {"inst_active_power_p_plus_l3", "1-0:61.7.0", "kW", ""},
+    {"inst_active_power_p_minus_l1", "1-0:22.7.0", "kW", ""},
+    {"inst_active_power_p_minus_l2", "1-0:42.7.0", "kW", ""},
+    {"inst_active_power_p_minus_l3", "1-0:62.7.0", "kW", ""},
+    {"inst_reactive_power_q_plus_l1", "1-0:23.7.0", "kVAr", ""},
+    {"inst_reactive_power_q_plus_l2", "1-0:43.7.0", "kVAr", ""},
+    {"inst_reactive_power_q_plus_l3", "1-0:63.7.0", "kVAr", ""},
+    {"inst_reactive_power_q_minus_l1", "1-0:24.7.0", "kVAr", ""},
+    {"inst_reactive_power_q_minus_l2", "1-0:44.7.0", "kVAr", ""},
+    {"inst_reactive_power_q_minus_l3", "1-0:64.7.0", "kVAr", ""}};
 
 
 SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decrypt_key(decrypt_key),
@@ -100,6 +97,7 @@ SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decryp
 
 void SmartyMeter::setFakeVector(char *fake_vector, int fake_vector_size)
 {
+  DEBUG_PRINTLN("Using fake vector instead of data from serial port.");
   _fake_vector = fake_vector;
   _fake_vector_size = fake_vector_size;
 }
@@ -119,7 +117,6 @@ void SmartyMeter::begin()
 bool SmartyMeter::readAndDecodeData()
 {
   uint8_t telegram[MAX_TELEGRAM_LENGTH];
-  //char buffer[MAX_TELEGRAM_LENGTH - 30];
   char buffer[MAX_TELEGRAM_LENGTH];
   Vector Vector_SM;
 

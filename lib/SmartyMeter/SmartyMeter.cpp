@@ -85,7 +85,8 @@ struct dsmr_field_t dsmr[] = {
     {"inst_reactive_power_q_plus_l3", "1-0:63.7.0", "kVAr", ""},
     {"inst_reactive_power_q_minus_l1", "1-0:24.7.0", "kVAr", ""},
     {"inst_reactive_power_q_minus_l2", "1-0:44.7.0", "kVAr", ""},
-    {"inst_reactive_power_q_minus_l3", "1-0:64.7.0", "kVAr", ""}};
+    {"inst_reactive_power_q_minus_l3", "1-0:64.7.0", "kVAr", ""},
+    {"gas_index", "0-1:24.2.1", "m3", ""} };
 
 
 SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decrypt_key(decrypt_key),

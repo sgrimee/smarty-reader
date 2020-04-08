@@ -115,13 +115,15 @@ void onMqttPublish(uint16_t packetId) {
 
 void connectToWifi() {
   DEBUG_PRINTLN("Connecting to Wi-Fi...");
+#ifdef HOSTNAME
+  WiFi.hostname(HOSTNAME);
+#endif
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
 void onWifiConnect(const WiFiEventStationModeGotIP& event) {
-  DEBUG_PRINTLN("Connected to Wi-Fi.");
+  DEBUG_PRINTF("Connected to wifi with Hostname: %s\n", WiFi.hostname().c_str());
   connectToMqtt();
-
   smartyDataReadTimer.attach(READ_SMARTY_EVERY_S, read_smarty_data);
 }
 

@@ -23,7 +23,7 @@
   Serial1 uses UART1 which is a transmit-only UART. UART1 TX pin is D4 (GPIO2,
   LED!!). If you use serial (UART0) to communicate with hardware, you can't use
   the Arduino Serial Monitor at the same time to debug your program! The best
-  way to debug is to use DEBUG_PRINTLN() and connect RX of an USB2Serial
+  way to debug is to use debugV() and connect RX of an USB2Serial
   adapter (FTDI, Profilic, CP210, ch340/341) to D4 and use a terminal program
   like CuteCom or CleverTerm to listen to D4.
 */

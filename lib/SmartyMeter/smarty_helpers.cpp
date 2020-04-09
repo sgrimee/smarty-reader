@@ -1,11 +1,9 @@
-#define SMARTY_DEBUG
-#include "debug_helpers.h"
-
-#include "smarty_helpers.h"
-
 #include <AES.h>
 #include <Crypto.h>
 #include <GCM.h>
+
+#include "shared_remote_debug.h"
+#include "smarty_helpers.h"
 
 /*
       Print hex dump on debug channel, formatted for use as 'fake_vector'
@@ -13,32 +11,32 @@
 void print_telegram(uint8_t telegram[], int telegram_size)
 {
     const int bpl = 22; // bytes per line
-    DEBUG_PRINTF("print_telegram - length: %d", telegram_size);
-    DEBUG_PRINTLN("Raw data for import in smarty_user_config.h:");
-    DEBUG_PRINTLN("const char fake_vector[] = {");
+    debugV("print_telegram - length: %d", telegram_size);
+    debugV("Raw data for import in smarty_user_config.h:");
+    debugV("const char fake_vector[] = {");
     int mul = (telegram_size / bpl);
     for (int i = 0; i < mul; i++)
     {
-        DEBUG_PRINT("    ");
+       rdebugD("    ");
         for (int j = 0; j < bpl; j++)
         {
-            DEBUG_PRINT("0x");
+            rdebugD("0x");
             print_hex(telegram[i * bpl + j]);
-            DEBUG_PRINT(", ");
+            rdebugD(", ");
         }
-        DEBUG_PRINTLN();
+        debugV();
     }
-    DEBUG_PRINT("    ");
+    rdebugD("    ");
     for (int j = 0; j < (telegram_size % bpl); j++)
     {
-        DEBUG_PRINT("0x");
+        rdebugD("0x");
         print_hex(telegram[mul * bpl + j]);
         if (j < (telegram_size % bpl) - 1)
         {
-            DEBUG_PRINT(", ");
+            rdebugD(", ");
         }
     }
-    DEBUG_PRINTLN("};\n");
+    debugV("};\n");
 }
 
 /*  
@@ -46,13 +44,13 @@ void print_telegram(uint8_t telegram[], int telegram_size)
 */
 void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_t *key_SM)
 {
-    DEBUG_PRINTLN("Entering init_vector");
+    debugV("Entering init_vector");
     vect->name = Vect_name; // vector name
     for (int i = 0; i < 16; i++)
         vect->key[i] = key_SM[i];
     uint16_t Data_Length = uint16_t(telegram[11]) * 256 + uint16_t(telegram[12]) - 17; // get length of data
     if (Data_Length > MAX_TELEGRAM_LENGTH) {
-        DEBUG_PRINTLN("WARNING: data shortened to MAX_TELEGRAM_LENGTH");
+        debugW("Data shortened to MAX_TELEGRAM_LENGTH");
         Data_Length = MAX_TELEGRAM_LENGTH;
     }
     for (int i = 0; i < Data_Length; i++)
@@ -71,7 +69,7 @@ void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_
     vect->datasize = Data_Length;
     vect->tagsize = 12;
     vect->ivsize = 12;
-    DEBUG_PRINTLN("Exiting init_vector");
+    debugV("Exiting init_vector");
 }
 
 /* 
@@ -81,7 +79,7 @@ void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
 {
     GCM<AES128> *gcmaes128 = 0;
 
-    DEBUG_PRINTLN("Entering decrypt_vector_to_buffer");
+    debugV("Entering decrypt_vector_to_buffer");
     gcmaes128 = new GCM<AES128>();
     size_t posn, len;
     size_t inc = vect->datasize;
@@ -96,13 +94,13 @@ void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
         gcmaes128->decrypt((uint8_t *)buffer + posn, vect->ciphertext + posn, len);
     }
     delete gcmaes128;
-    DEBUG_PRINTLN("Exiting decrypt_vector_to_buffer");
+    debugV("Exiting decrypt_vector_to_buffer");
 }
 
 void convert_equipment_id(char *mystring)
 {
     // coded in HEX
-    //DEBUG_PRINTLN("Entering convert_equipment_id");
+    //debugV("Entering convert_equipment_id");
     int len = strlen(mystring);
     for (int i = 0; i < len / 2; i++)
         mystring[i] = char(((int(mystring[i * 2])) - 48) * 16 + (int(mystring[i * 2 + 1]) - 48));
@@ -115,7 +113,7 @@ void convert_equipment_id(char *mystring)
 */
 void replace_by_val_in_first_braces(char *mystring)
 {
-    //DEBUG_PRINTLN("Entering replace_by_val_in_first_braces");
+    //debugV("Entering replace_by_val_in_first_braces");
     int a = strcspn(mystring, "(");
     int b = strcspn(mystring, ")");
     int j = 0;
@@ -133,7 +131,7 @@ void replace_by_val_in_first_braces(char *mystring)
 */
 void replace_by_val_in_last_braces(char *mystring)
 {
-    //DEBUG_PRINTLN("Entering replace_by_val_in_last_braces");
+    //debugV("Entering replace_by_val_in_last_braces");
     // get pointer to last occurrence of '('
     char *ret = strrchr(mystring, '(');
     replace_by_val_in_first_braces(ret);
@@ -146,7 +144,7 @@ void replace_by_val_in_last_braces(char *mystring)
 */
 void remove_unit_if_present(char *mystring)
 {
-    //DEBUG_PRINTLN("Entering remove_unit_if_present");
+    //debugV("Entering remove_unit_if_present");
     char *pos = strchr(mystring, '*');
     if (pos)
         // replace character with terminating null
@@ -157,12 +155,12 @@ void print_vector(Vector *vect)
 {
     const int sll = 50; // length of a line if printing serial raw data
 
-    DEBUG_PRINTLN("\nEntering print_vector");
-    DEBUG_PRINTF("Vector_Name: %s\n", vect->name);
-    DEBUG_PRINT("Key: ");
+    debugV("\nEntering print_vector");
+    debugV("Vector_Name: %s", vect->name);
+    rdebugV("Key: ");
     for (int cnt = 0; cnt < 16; cnt++)
         print_hex(vect->key[cnt]);
-    DEBUG_PRINT("\nData (Text): ");
+    rdebugV("\nData (Text): ");
     int mul = (vect->datasize / sll);
     for (int i = 0; i < mul; i++)
     {
@@ -170,33 +168,33 @@ void print_vector(Vector *vect)
         {
             print_hex(vect->ciphertext[i * sll + j]);
         }
-        DEBUG_PRINTLN();
+        debugV();
     }
     for (int j = 0; j < (vect->datasize % sll); j++)
     {
         print_hex(vect->ciphertext[mul * sll + j]);
     }
-    DEBUG_PRINT("\nAuth_Data: ");
+    rdebugV("\nAuth_Data: ");
     for (int cnt = 0; cnt < 17; cnt++)
         print_hex(vect->authdata[cnt]);
-    DEBUG_PRINT("\nInit_Vect: ");
+    rdebugV("\nInit_Vect: ");
     for (int cnt = 0; cnt < 12; cnt++)
         print_hex(vect->iv[cnt]);
-    DEBUG_PRINT("\nAuth_Tag: ");
+    rdebugV("\nAuth_Tag: ");
     for (int cnt = 0; cnt < 12; cnt++)
         print_hex(vect->tag[cnt]);
-    DEBUG_PRINTF("\nAuth_Data Size: %d\n", vect->authsize);
-    DEBUG_PRINTF("Data Size: %d\n", vect->datasize);
-    DEBUG_PRINTF("Auth_Tag Size: %d\n", vect->tagsize);
-    DEBUG_PRINTF("Init_Vect Size: %d\n", vect->ivsize);
-    DEBUG_PRINTLN();
+    debugV("\nAuth_Data Size: %d", vect->authsize);
+    debugV("Data Size: %d", vect->datasize);
+    debugV("Auth_Tag Size: %d", vect->tagsize);
+    debugV("Init_Vect Size: %d", vect->ivsize);
+    debugV();
 }
 
 void print_hex(char x)
 {
     if (x < 0x10) // add leading 0 if needed
     {
-        DEBUG_PRINT("0");
+        rdebugV("0");
     };
-    DEBUG_PRINT(x, HEX);
+    //rdebugV(x, HEX);
 }

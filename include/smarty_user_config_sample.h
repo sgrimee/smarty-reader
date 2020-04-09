@@ -6,12 +6,15 @@
 #include <ESP8266WiFi.h>
 #include "Arduino.h"
 
-// Uncomment if debugging requested
-#define SMARTY_DEBUG
+// Uncomment to disable debugging
+//#define DEBUG_DISABLED
 
 // Add wifi credentials
 #define WIFI_SSID "mywifi"
 #define WIFI_PASSWORD "mypass"
+
+// If left commented out, a hostname based on the mac address is used
+//#define HOSTNAME "my_chosen_hostname"
 
 // Uncomment if you need to set a static IP, otherwise DHCP is used.
 //define USE_WIFI_STATIC

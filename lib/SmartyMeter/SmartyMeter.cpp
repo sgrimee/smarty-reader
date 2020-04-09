@@ -23,16 +23,14 @@
   Serial1 uses UART1 which is a transmit-only UART. UART1 TX pin is D4 (GPIO2,
   LED!!). If you use serial (UART0) to communicate with hardware, you can't use
   the Arduino Serial Monitor at the same time to debug your program! The best
-  way to debug is to use DEBUG_PRINTLN() and connect RX of an USB2Serial
+  way to debug is to use debugV() and connect RX of an USB2Serial
   adapter (FTDI, Profilic, CP210, ch340/341) to D4 and use a terminal program
   like CuteCom or CleverTerm to listen to D4.
 */
 
-#define SMARTY_DEBUG
-#include "debug_helpers.h"
-
-#include "SmartyMeter.h"
+#include "shared_remote_debug.h"
 #include "smarty_helpers.h"
+#include "SmartyMeter.h"
 
 #define OBIS_MATCH_LENGTH 9 // number of characters to match to detect an OBIS record
 #define MAX_ORBIS_SIZE 15
@@ -98,14 +96,14 @@ SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decryp
 
 void SmartyMeter::setFakeVector(char *fake_vector, int fake_vector_size)
 {
-  DEBUG_PRINTLN("Using fake vector instead of data from serial port.");
+  debugV("Using fake vector instead of data from serial port.");
   _fake_vector = fake_vector;
   _fake_vector_size = fake_vector_size;
 }
 
 void SmartyMeter::begin()
 {
-  //DEBUG_PRINTLN("SmartyMeter::begin");
+  debugV("SmartyMeter::begin");
   pinMode(_data_request_pin, OUTPUT);
   Serial.begin(115200); // Hardware serial connected to smarty
   Serial.setRxBufferSize(MAX_TELEGRAM_LENGTH);
@@ -124,7 +122,7 @@ bool SmartyMeter::readAndDecodeData()
   int telegram_size = readTelegram(telegram, sizeof(telegram));
   if (telegram_size == 0)
   {
-    DEBUG_PRINTLN("SmartyMeter::readAndDecodeData - No data received");
+    debugD("SmartyMeter::readAndDecodeData - No data received");
     return false;
   }
   print_telegram(telegram, telegram_size);
@@ -132,7 +130,7 @@ bool SmartyMeter::readAndDecodeData()
   init_vector(telegram, &Vector_SM, "Vector_SM", _decrypt_key);
   if (Vector_SM.datasize == MAX_TELEGRAM_LENGTH)
   {
-    DEBUG_PRINTLN("SmartyMeter::readAndDecodeData - MAX_TELEGRAM_LENGTH, aborting");
+    debugE("SmartyMeter::readAndDecodeData - MAX_TELEGRAM_LENGTH, aborting");
     return false;
   }
   print_vector(&Vector_SM);
@@ -148,7 +146,7 @@ bool SmartyMeter::readAndDecodeData()
 int SmartyMeter::readTelegram(uint8_t telegram[], int max_telegram_length)
 {
   int cnt = 0;
-  DEBUG_PRINTLN("Entering readTelegram");
+  debugV("Entering readTelegram");
   memset(telegram, '1', max_telegram_length); // initialise telegram buffer
 
   if (_fake_vector_size > 0)
@@ -170,12 +168,12 @@ int SmartyMeter::readTelegram(uint8_t telegram[], int max_telegram_length)
 
 void SmartyMeter::clearDsmr()
 {
-  DEBUG_PRINTLN("About to clear dsmr fields.");
+  debugV("About to clear dsmr fields.");
   for (int i = 0; i < num_dsmr_fields; i++)
   {
     dsmr[i].value[0] = 0;
   }
-  DEBUG_PRINTLN("dsmr fields cleared.");
+  debugV("dsmr fields cleared.");
 }
 
 /*
@@ -185,7 +183,7 @@ void SmartyMeter::parseDsmrString(char *mystring)
 {
   clearDsmr();
 
-  DEBUG_PRINTF("parseDsmrString: string to parse:\n%s\n", mystring);
+  debugD("parseDsmrString: string to parse:\n%s", mystring);
 
   char *line;
   char orbis[MAX_ORBIS_SIZE + 1];
@@ -200,24 +198,24 @@ void SmartyMeter::parseDsmrString(char *mystring)
     {
       break;
     }
-    //DEBUG_PRINTF("Processing line: %s\n", line);
+    debugV("Processing line: %s\n", line);
 
     // Extract orbis code from line
     int first_open_bracket_pos = strcspn(line, "(");
-    //DEBUG_PRINTF("Bracket pos: %d\n", first_open_bracket_pos);
+    //debugV("Bracket pos: %d\n", first_open_bracket_pos);
     if (first_open_bracket_pos >= (int)strlen(line))
     {
-      //DEBUG_PRINTLN("No bracket in this line, skipping.");
+      //debugV("No bracket in this line, skipping.");
       continue;
     }
     strncpy(orbis, line, first_open_bracket_pos);
     orbis[first_open_bracket_pos] = 0;
 
-    //DEBUG_PRINTF("Will try to match %d orbis fields.\n", num_dsmr_fields);
+    debugV("Will try to match %d orbis fields.\n", num_dsmr_fields);
     found = false;
     for (int i = 0; i < num_dsmr_fields; i++)
     {
-      //DEBUG_PRINTF("Comparing extracted orbis %s with orbis %s\n", orbis, dsmr[i].id);
+      //debugV("Comparing extracted orbis %s with orbis %s\n", orbis, dsmr[i].id);
       if (strcmp(orbis, dsmr[i].id) == 0)
       {
         found = true;
@@ -236,29 +234,28 @@ void SmartyMeter::parseDsmrString(char *mystring)
           convert_equipment_id(line);
         }
         remove_unit_if_present(line);
-        //DEBUG_PRINTF("Setting dsmr %s with value %s\n", dsmr[i].name, line);
+        debugV("Setting dsmr %s with value %s\n", dsmr[i].name, line);
         strncpy(dsmr[i].value, line, MAX_VALUE_LENGTH);
         break;
       }
     }
     if (!found) {
-      DEBUG_PRINTF("Could not match orbis %s\n", orbis); 
+      debugD("Could not match orbis %s\n", orbis); 
     }
   }
-  DEBUG_PRINTLN("Exiting parseDsmrString");
+  debugV("Exiting parseDsmrString");
 }
 
 void SmartyMeter::printDsmr()
 {
-  DEBUG_PRINTLN("\nSmartyMeter::printDsmr:");
+  debugV("\nSmartyMeter::printDsmr:");
   for (int i = 0; i < num_dsmr_fields; i++)
   {
-    //delay(10);
-    DEBUG_PRINTF("%12s | %33s | %s (%s)\n",
+    debugD("%12s | %33s | %s (%s)\n",
                  dsmr[i].id,
                  dsmr[i].name,
                  dsmr[i].value,
                  dsmr[i].unit);
   }
-  DEBUG_PRINTLN();
+  debugD();
 }

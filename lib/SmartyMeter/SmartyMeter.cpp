@@ -34,7 +34,6 @@
 #include "SmartyMeter.h"
 #include "smarty_helpers.h"
 
-#define OBIS_MATCH_LENGTH 9 // number of characters to match to detect an OBIS record
 #define MAX_ORBIS_SIZE 15
 
 struct dsmr_field_t dsmr[] = {
@@ -88,6 +87,10 @@ struct dsmr_field_t dsmr[] = {
     {"inst_reactive_power_q_minus_l3", "1-0:64.7.0", "kVAr", ""},
     {"gas_index", "0-1:24.2.1", "m3", ""} };
 
+uint8_t telegram[MAX_TELEGRAM_LENGTH];
+char buffer[MAX_TELEGRAM_LENGTH];
+Vector Vector_SM;
+
 
 SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decrypt_key(decrypt_key),
                                                                          _data_request_pin(data_request_pin),
@@ -108,8 +111,9 @@ void SmartyMeter::begin()
   //DEBUG_PRINTLN("SmartyMeter::begin");
   pinMode(_data_request_pin, OUTPUT);
   Serial.begin(115200); // Hardware serial connected to smarty
-  Serial.setRxBufferSize(MAX_TELEGRAM_LENGTH);
+  Serial.setRxBufferSize(MAX_TELEGRAM_LENGTH); 
 }
+
 
 /*  
     Attempts to read data from the meter and decode it. 
@@ -117,49 +121,44 @@ void SmartyMeter::begin()
 */
 bool SmartyMeter::readAndDecodeData()
 {
-  uint8_t telegram[MAX_TELEGRAM_LENGTH];
-  char buffer[MAX_TELEGRAM_LENGTH];
-  Vector Vector_SM;
-
-  int telegram_size = readTelegram(telegram, sizeof(telegram));
+  int telegram_size = readTelegram(telegram);
+  DEBUG_PRINTF("SmartyMeter::readAndDecodeData - %d bytes read\n", telegram_size);
   if (telegram_size == 0)
   {
-    DEBUG_PRINTLN("SmartyMeter::readAndDecodeData - No data received");
     return false;
   }
   print_telegram(telegram, telegram_size);
-
-  init_vector(telegram, &Vector_SM, "Vector_SM", _decrypt_key);
-  if (Vector_SM.datasize == MAX_TELEGRAM_LENGTH)
+  if (! init_vector(telegram, &Vector_SM, "Vector_SM", _decrypt_key))
   {
-    DEBUG_PRINTLN("SmartyMeter::readAndDecodeData - MAX_TELEGRAM_LENGTH, aborting");
+    DEBUG_PRINTLN("ERROR in init_vector, aborting.");
     return false;
   }
   print_vector(&Vector_SM);
-  decrypt_vector_to_buffer(&Vector_SM, buffer, sizeof(buffer));
-  parseDsmrString(buffer);
-  return true;
+  decrypt_vector_to_buffer(&Vector_SM, buffer);
+  parseDsmrString(buffer); 
+  return true; 
 }
 
 /*
       Read data from the counter on the serial line
       Saves data to telegram and returns its size.
 */
-int SmartyMeter::readTelegram(uint8_t telegram[], int max_telegram_length)
+int SmartyMeter::readTelegram(uint8_t telegram[])
 {
   int cnt = 0;
   DEBUG_PRINTLN("Entering readTelegram");
-  memset(telegram, '1', max_telegram_length); // initialise telegram buffer
+  int max_telegram_size = sizeof(telegram);
+  memset(telegram, 0, max_telegram_size); // initialise telegram buffer
 
   if (_fake_vector_size > 0)
   {
+    DEBUG_PRINTLN("readTelegram using fake vector");
     memcpy(telegram, _fake_vector, _fake_vector_size);
     return _fake_vector_size;
   }
 
   digitalWrite(_data_request_pin, LOW); // Request serial data On
-  delay(10);
-  while ((Serial.available()) && (cnt != max_telegram_length))
+  while (Serial.available() && (cnt != max_telegram_size))
   {
     telegram[cnt] = Serial.read();
     cnt++;

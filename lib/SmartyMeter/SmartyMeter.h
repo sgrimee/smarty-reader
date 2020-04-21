@@ -61,7 +61,7 @@ private:
   byte _data_request_pin;
   char *_fake_vector;
   int _fake_vector_size;
-  int readTelegram(uint8_t telegram[], int max_telegram_length);
+  int readTelegram(uint8_t telegram[]);
   void parseDsmrString(char *mystring);
   void clearDsmr();
 };

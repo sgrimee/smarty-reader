@@ -1,6 +1,5 @@
 #define SMARTY_DEBUG
 #include "debug_helpers.h"
-
 #include "smarty_helpers.h"
 
 #include <AES.h>
@@ -13,7 +12,7 @@
 void print_telegram(uint8_t telegram[], int telegram_size)
 {
     const int bpl = 22; // bytes per line
-    DEBUG_PRINTF("print_telegram - length: %d", telegram_size);
+    DEBUG_PRINTF("print_telegram with length: %d\n", telegram_size);
     DEBUG_PRINTLN("Raw data for import in smarty_user_config.h:");
     DEBUG_PRINTLN("const char fake_vector[] = {");
     int mul = (telegram_size / bpl);
@@ -43,17 +42,25 @@ void print_telegram(uint8_t telegram[], int telegram_size)
 
 /*  
     Decode the raw data and fill the vector
+    Return true if successful
 */
-void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_t *key_SM)
+bool init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_t *key_SM)
 {
     DEBUG_PRINTLN("Entering init_vector");
+
+    if (telegram[0] != 0xDB) {
+        DEBUG_PRINTLN("ERROR, first byte of telegram should be 0xDB, aborting.");
+        return false;
+    }
+
     vect->name = Vect_name; // vector name
     for (int i = 0; i < 16; i++)
         vect->key[i] = key_SM[i];
     uint16_t Data_Length = uint16_t(telegram[11]) * 256 + uint16_t(telegram[12]) - 17; // get length of data
-    if (Data_Length > MAX_TELEGRAM_LENGTH) {
-        DEBUG_PRINTLN("WARNING: data shortened to MAX_TELEGRAM_LENGTH");
-        Data_Length = MAX_TELEGRAM_LENGTH;
+    DEBUG_PRINTF("init_vector: data length read in telegram: %d\n", Data_Length);
+    if ((Data_Length+18) > MAX_TELEGRAM_LENGTH) {
+        DEBUG_PRINTF("ERROR: data length (%d) is too large for MAX_TELEGRAM_LENGTH (%d)\n", Data_Length, MAX_TELEGRAM_LENGTH);
+        return false;
     }
     for (int i = 0; i < Data_Length; i++)
         vect->ciphertext[i] = telegram[i + 18];
@@ -72,12 +79,14 @@ void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_
     vect->tagsize = 12;
     vect->ivsize = 12;
     DEBUG_PRINTLN("Exiting init_vector");
+    return true;
 }
+
 
 /* 
   Decrypt text in the vector and put it in the buffer
 */
-void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
+void decrypt_vector_to_buffer(Vector *vect, char buffer[])
 {
     GCM<AES128> *gcmaes128 = 0;
 
@@ -85,6 +94,7 @@ void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size)
     gcmaes128 = new GCM<AES128>();
     size_t posn, len;
     size_t inc = vect->datasize;
+    int buffer_size = sizeof(buffer);
     memset(buffer, 0, buffer_size); // ensure final string will be zero terminated
     gcmaes128->setKey(vect->key, gcmaes128->keySize());
     gcmaes128->setIV(vect->iv, vect->ivsize);

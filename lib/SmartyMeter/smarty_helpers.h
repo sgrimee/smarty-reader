@@ -3,7 +3,7 @@
 #ifndef smarty_helpers_h
 #define smarty_helpers_h
 
-#define MAX_TELEGRAM_LENGTH 1200
+#define MAX_TELEGRAM_LENGTH 1500
 
 struct Vector
 {
@@ -20,8 +20,8 @@ struct Vector
 };
 
 void print_telegram(uint8_t telegram[], int telegram_size);
-void init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_t *key_SM);
-void decrypt_vector_to_buffer(Vector *vect, char buffer[], int buffer_size);
+bool init_vector(uint8_t telegram[], Vector *vect, const char *Vect_name, uint8_t *key_SM);
+void decrypt_vector_to_buffer(Vector *vect, char buffer[]);
 void convert_equipment_id(char *mystring);
 void replace_by_val_in_first_braces(char *mystring);
 void replace_by_val_in_last_braces(char *mystring);

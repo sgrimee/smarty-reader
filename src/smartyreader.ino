@@ -44,9 +44,10 @@
 #include "smarty_user_config.h"
 #include "debug_helpers.h"
 #include "SmartyMeter.h"
+#include "smarty_helpers.h"
 
-#define READ_SMARTY_EVERY_S 59 // seconds
-#define DATA_REQUEST_PIN D3
+
+#define READ_SMARTY_EVERY_S 10 // seconds
 
 Ticker mqttReconnectTimer;
 Ticker wifiReconnectTimer;
@@ -61,7 +62,7 @@ AsyncMqttClient mqttClient;
 #warning Using fake smart meter!
 #endif
 
-SmartyMeter smarty(decrypt_key, DATA_REQUEST_PIN);
+SmartyMeter smarty(decrypt_key, D3);
 
 
 // MQTT
@@ -84,24 +85,6 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
   if (WiFi.isConnected()) {
     mqttReconnectTimer.once(2, connectToMqtt);
   }
-}
-
-void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties properties, size_t len, size_t index, size_t total) {
-  DEBUG_PRINTLN("Publish received.");
-  DEBUG_PRINT("  topic: ");
-  DEBUG_PRINTLN(topic);
-  DEBUG_PRINT("  qos: ");
-  DEBUG_PRINTLN(properties.qos);
-  DEBUG_PRINT("  dup: ");
-  DEBUG_PRINTLN(properties.dup);
-  DEBUG_PRINT("  retain: ");
-  DEBUG_PRINTLN(properties.retain);
-  DEBUG_PRINT("  len: ");
-  DEBUG_PRINTLN(len);
-  DEBUG_PRINT("  index: ");
-  DEBUG_PRINTLN(index);
-  DEBUG_PRINT("  total: ");
-  DEBUG_PRINTLN(total);
 }
 
 void onMqttPublish(uint16_t packetId) {
@@ -150,7 +133,6 @@ void setup()
 
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onDisconnect(onMqttDisconnect);
-  mqttClient.onMessage(onMqttMessage);
   mqttClient.onPublish(onMqttPublish);
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
 
@@ -163,7 +145,6 @@ void setup()
   
   digitalWrite(LED_BUILTIN, HIGH); // Off
 }
-
 
 void read_smarty_data()
 {
@@ -180,8 +161,8 @@ void read_smarty_data()
 //
 void loop()
 {
-  // DEBUG_PRINT(".");
-  // delay(100);
+  DEBUG_PRINT(".");
+  delay(100);
 }
 
 

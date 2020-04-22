@@ -107,13 +107,11 @@ void connectToWifi() {
 void onWifiConnect(const WiFiEventStationModeGotIP& event) {
   DEBUG_PRINTF("Connected to wifi with Hostname: %s\n", WiFi.hostname().c_str());
   connectToMqtt();
-  smartyDataReadTimer.attach(READ_SMARTY_EVERY_S, read_smarty_data);
 }
 
 void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
   DEBUG_PRINTLN("Disconnected from Wi-Fi.");
   mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
-  smartyDataReadTimer.detach(); // ensure we don't read smarty data if wifi is disconnected
   wifiReconnectTimer.once(2, connectToWifi);
 }
 
@@ -143,6 +141,7 @@ void setup()
 #endif
   smarty.begin();
   
+  smartyDataReadTimer.attach(READ_SMARTY_EVERY_S, read_smarty_data);
   digitalWrite(LED_BUILTIN, HIGH); // Off
 }
 

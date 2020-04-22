@@ -173,8 +173,13 @@ void publish_dsmr_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {
     sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value %s.\n", topic, dsmr[i].value);
-    theClient.publish(topic, 0, false, dsmr[i].value);
+    DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[i].value);
+    int packetId = theClient.publish(topic, 1, false, dsmr[i].value);
+    if (packetId == 0) {
+      DEBUG_PRINTF("ERROR sending packet id %d\n", packetId);
+    } else {
+      DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
+    }
   }
   DEBUG_PRINTLN("Exiting publish_dmsr_mqtt");
 }
@@ -196,7 +201,12 @@ void publish_units_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
     }
     #endif
     sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].unit);
-    theClient.publish(topic, 0, true, dsmr[i].unit); 
+    DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[i].unit);
+    int packetId = theClient.publish(topic, 1, false, dsmr[i].unit);
+    if (packetId == 0) {
+      DEBUG_PRINTF("ERROR sending packet id %d\n", packetId);
+    } else {
+      DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
+    }
   }
 }

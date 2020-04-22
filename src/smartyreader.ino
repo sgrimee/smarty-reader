@@ -191,11 +191,13 @@ void publish_units_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
   char topic[70];
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {
+    #ifdef IGNORE_EMPTY_UNITS
     if (dsmr[i].unit[0] == 0)
     {
       DEBUG_PRINTF("Ignoring mqtt publish of unit for %s\n", dsmr[i].name);
       continue;
     }
+    #endif
     sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
     DEBUG_PRINTF("Publishing topic %s with value %s\n", topic, dsmr[i].unit);
     theClient.publish(topic, 0, true, dsmr[i].unit); 

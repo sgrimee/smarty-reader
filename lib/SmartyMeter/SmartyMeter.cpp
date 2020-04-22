@@ -90,6 +90,7 @@ struct dsmr_field_t dsmr[] = {
 uint8_t telegram[MAX_TELEGRAM_LENGTH];
 char buffer[MAX_TELEGRAM_LENGTH];
 Vector Vector_SM;
+int empty_reads = 0;
 
 
 SmartyMeter::SmartyMeter(uint8_t decrypt_key[], byte data_request_pin) : _decrypt_key(decrypt_key),
@@ -125,8 +126,14 @@ bool SmartyMeter::readAndDecodeData()
   DEBUG_PRINTF("SmartyMeter::readAndDecodeData - %d bytes read\n", telegram_size);
   if (telegram_size == 0)
   {
+    empty_reads++;
+    if (empty_reads > 10) {
+      DEBUG_PRINTLN("No data received for too long, resetting device.");
+      while(1){;}
+    }
     return false;
   }
+  empty_reads = 0;
   print_telegram(telegram, telegram_size);
   if (! init_vector(telegram, &Vector_SM, "Vector_SM", _decrypt_key))
   {

@@ -189,7 +189,9 @@ void read_smarty_data()
 
 bool can_publish() {
   // Only send MQTT_QUEUE_SIZE more publish than the last one acknowledged
-	return (mqttClient.connected() && ((last_mqtt_id_ack + MQTT_QUEUE_SIZE) >= last_mqtt_id_sent));
+  if (! mqttClient.connected()) return false;
+  if (last_mqtt_id_ack > (65535 - MQTT_QUEUE_SIZE)) return true;
+	return ((last_mqtt_id_ack + MQTT_QUEUE_SIZE) >= last_mqtt_id_sent);
 }
 
 bool need_publish() {

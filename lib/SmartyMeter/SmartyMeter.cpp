@@ -141,7 +141,7 @@ bool SmartyMeter::readAndDecodeData()
     DEBUG_PRINTLN("ERROR in init_vector, aborting.");
     return false;
   }
-  print_vector(&Vector_SM);
+  //print_vector(&Vector_SM);
   decrypt_vector_to_buffer(&Vector_SM, buffer);
   parseDsmrString(buffer); 
   return true; 

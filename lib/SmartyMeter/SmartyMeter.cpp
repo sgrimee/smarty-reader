@@ -169,6 +169,10 @@ int SmartyMeter::readTelegram(uint8_t telegram[])
   while (Serial.available() && (cnt != max_telegram_size))
   {
     telegram[cnt] = Serial.read();
+    if ((cnt==0) && (telegram[0] != 0xDB)) {
+      DEBUG_PRINTLN("The first byte should be 0xDB. Resetting device to re-sync.");
+      while(1){;}
+    }
     cnt++;
   }
   digitalWrite(_data_request_pin, HIGH); // Request serial data Off

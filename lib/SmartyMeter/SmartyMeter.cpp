@@ -37,6 +37,11 @@
 #define MAX_ORBIS_SIZE 15
 
 struct dsmr_field_t dsmr[] = {
+  {"pwr_dlvrd", "1-0:1.7.0", "kW", ""},
+  {"pwr_rtrnd", "1-0:2.7.0", "kW", ""},
+  {"react_engy_dlvrd_tariff1", "1-0:3.8.0", "kVArh", ""},
+  {"react_engy_rtrnd_tariff1", "1-0:4.8.0", "kVArh", ""},
+
   {"act_pwr_p_minus_l1", "1-0:22.7.0", "kW", ""},
   {"act_pwr_p_minus_l2", "1-0:42.7.0", "kW", ""},
   {"act_pwr_p_minus_l3", "1-0:62.7.0", "kW", ""},
@@ -73,10 +78,7 @@ struct dsmr_field_t dsmr[] = {
   {"phase_volt_l1", "1-0:32.7.0", "V", ""},
   {"phase_volt_l2", "1-0:52.7.0", "V", ""},
   {"phase_volt_l3", "1-0:72.7.0", "V", ""},
-  {"pwr_dlvrd", "1-0:1.7.0", "kW", ""},
-  {"pwr_rtrnd", "1-0:2.7.0", "kW", ""},
-  {"react_engy_dlvrd_tariff1", "1-0:3.8.0", "kVArh", ""},
-  {"react_engy_rtrnd_tariff1", "1-0:4.8.0", "kVArh", ""},
+
   {"react_pwr_dlvrd", "1-0:3.7.0", "kVAr", ""},
   {"react_pwr_q_minus_l1", "1-0:24.7.0", "kVAr", ""},
   {"react_pwr_q_minus_l2", "1-0:44.7.0", "kVAr", ""},

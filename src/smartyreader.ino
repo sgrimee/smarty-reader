@@ -169,6 +169,11 @@ void loop()
 void publish_dsmr_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
 {
   DEBUG_PRINTLN("Entering publish_dmsr_mqtt");
+  if (! theClient.connected()) {
+    DEBUG_PRINTLN("MQTT is not connected, skipping.");
+    return;
+  }
+ 
   char topic[70];
   for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
   {

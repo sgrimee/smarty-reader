@@ -155,7 +155,7 @@ int SmartyMeter::readTelegram(uint8_t telegram[])
 {
   int cnt = 0;
   DEBUG_PRINTLN("Entering readTelegram");
-  int max_telegram_size = sizeof(telegram);
+  int max_telegram_size = MAX_TELEGRAM_LENGTH;
   memset(telegram, 0, max_telegram_size); // initialise telegram buffer
 
   if (_fake_vector_size > 0)
@@ -166,7 +166,7 @@ int SmartyMeter::readTelegram(uint8_t telegram[])
   }
 
   digitalWrite(_data_request_pin, LOW); // Request serial data On
-  while (Serial.available() && (cnt != max_telegram_size))
+  while (Serial.available() && (cnt < max_telegram_size))
   {
     telegram[cnt] = Serial.read();
     if ((cnt==0) && (telegram[0] != 0xDB)) {

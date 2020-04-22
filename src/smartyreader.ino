@@ -64,8 +64,38 @@ AsyncMqttClient mqttClient;
 
 SmartyMeter smarty(decrypt_key, D3);
 
+int next_dsmr_to_send = INT_MAX;
+
+int last_mqtt_id_sent = 0;
+int last_mqtt_id_ack = 0;
+#define MQTT_QUEUE_SIZE 10
+
+char topic[70];
 
 // MQTT
+
+/*
+  Publish the units to mqtt. Meant to be called just once after connecting.
+*/
+void publish_units_mqtt()
+{
+  DEBUG_PRINTLN("Entering publish_units_mqtt");
+  for (int i = 0; i < smarty.num_dsmr_fields; i++)
+  {
+    #ifdef IGNORE_EMPTY_UNITS
+    if (dsmr[i].unit[0] == 0)
+    {
+      DEBUG_PRINTF("Ignoring mqtt publish of unit for %s\n", dsmr[i].name);
+      continue;
+    }
+    #endif
+    sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
+    DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[i].unit);
+    if (mqttClient.publish(topic, 0, true, dsmr[i].unit) == 0) {
+      DEBUG_PRINTLN("ERROR sending unit.");
+    }
+  }
+}
 
 void connectToMqtt() {
   DEBUG_PRINTLN("Connecting to MQTT...");
@@ -76,7 +106,7 @@ void onMqttConnect(bool sessionPresent) {
   DEBUG_PRINTLN("Connected to MQTT.");
   DEBUG_PRINT("Session present: ");
   DEBUG_PRINTLN(sessionPresent);
-  publish_units_mqtt(smarty, mqttClient);
+  publish_units_mqtt();
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
@@ -89,6 +119,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 
 void onMqttPublish(uint16_t packetId) {
   DEBUG_PRINTF("Publish acknowledged with packet id: %d\n", packetId);
+  last_mqtt_id_ack = packetId;
 }
 
 
@@ -114,8 +145,6 @@ void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
 }
 
 
-// Initial setup
-//
 void setup()
 {
   delay(500);
@@ -143,75 +172,52 @@ void setup()
   digitalWrite(LED_BUILTIN, HIGH); // Off
 }
 
+void start_publishing_dsmr() {
+	next_dsmr_to_send = 0;
+}
+
 void read_smarty_data()
 {
   DEBUG_PRINTLN("\n------- Reading from Smarty");
   if (smarty.readAndDecodeData())
   {
     smarty.printDsmr();
-    publish_dsmr_mqtt(smarty, mqttClient);
+    start_publishing_dsmr();
   }
   DEBUG_PRINTLN("Done reading.");
 }
 
-// Main loop
-//
-void loop()
-{
-  DEBUG_PRINT(".");
-  delay(100);
+bool can_publish() {
+  // Only send MQTT_QUEUE_SIZE more publish than the last one acknowledged
+	return (mqttClient.connected() && ((last_mqtt_id_ack + MQTT_QUEUE_SIZE) >= last_mqtt_id_sent));
+}
+
+bool need_publish() {
+	return (next_dsmr_to_send < smarty.num_dsmr_fields);
 }
 
 
-/*
-  Publish dsmr values (no units) to mqtt. 
-*/
-void publish_dsmr_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
-{
-  DEBUG_PRINTLN("Entering publish_dmsr_mqtt");
-  if (! theClient.connected()) {
-    DEBUG_PRINTLN("MQTT is not connected, skipping.");
+void publish_next_dsmr() {
+  sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[next_dsmr_to_send].name);
+  DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[next_dsmr_to_send].value);
+  int packetId = mqttClient.publish(topic, 1, false, dsmr[next_dsmr_to_send].value);
+  if (packetId == 0) {
+    DEBUG_PRINTF("ERROR sending packet id %d\n", packetId);
     return;
   }
- 
-  char topic[70];
-  for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
-  {
-    sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[i].value);
-    int packetId = theClient.publish(topic, 1, false, dsmr[i].value);
-    if (packetId == 0) {
-      DEBUG_PRINTF("ERROR sending packet id %d\n", packetId);
-    } else {
-      DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
-    }
-  }
-  DEBUG_PRINTLN("Exiting publish_dmsr_mqtt");
+  DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
+  next_dsmr_to_send++;
+  last_mqtt_id_sent = packetId;
 }
 
-/*
-  Publish the units to mqtt. Meant to be called just once after connecting.
-*/
-void publish_units_mqtt(SmartyMeter &theSmarty, AsyncMqttClient &theClient)
+void loop()
 {
-  DEBUG_PRINTLN("Entering publish_units_mqtt");
-  char topic[70];
-  for (int i = 0; i < theSmarty.num_dsmr_fields; i++)
-  {
-    #ifdef IGNORE_EMPTY_UNITS
-    if (dsmr[i].unit[0] == 0)
-    {
-      DEBUG_PRINTF("Ignoring mqtt publish of unit for %s\n", dsmr[i].name);
-      continue;
-    }
-    #endif
-    sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[i].unit);
-    int packetId = theClient.publish(topic, 1, false, dsmr[i].unit);
-    if (packetId == 0) {
-      DEBUG_PRINTF("ERROR sending packet id %d\n", packetId);
-    } else {
-      DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
-    }
+  if (need_publish() && can_publish()) {
+    publish_next_dsmr();
   }
 }
+
+
+   
+    
+ 

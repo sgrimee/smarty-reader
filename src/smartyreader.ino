@@ -80,7 +80,7 @@ void onMqttConnect(bool sessionPresent) {
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
-  DEBUG_PRINTLN("Disconnected from MQTT.");
+  DEBUG_PRINTLN("\nDisconnected from MQTT.");
 
   if (WiFi.isConnected()) {
     mqttReconnectTimer.once(2, connectToMqtt);
@@ -88,9 +88,7 @@ void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
 }
 
 void onMqttPublish(uint16_t packetId) {
-  DEBUG_PRINTLN("Publish acknowledged.");
-  DEBUG_PRINT("  packetId: ");
-  DEBUG_PRINTLN(packetId);
+  DEBUG_PRINTF("Publish acknowledged with packet id: %d\n", packetId);
 }
 
 
@@ -105,12 +103,12 @@ void connectToWifi() {
 }
 
 void onWifiConnect(const WiFiEventStationModeGotIP& event) {
-  DEBUG_PRINTF("Connected to wifi with Hostname: %s\n", WiFi.hostname().c_str());
+  DEBUG_PRINTF("\nConnected to wifi with Hostname: %s\n", WiFi.hostname().c_str());
   connectToMqtt();
 }
 
 void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
-  DEBUG_PRINTLN("Disconnected from Wi-Fi.");
+  DEBUG_PRINTLN("\nDisconnected from Wi-Fi.");
   mqttReconnectTimer.detach(); // ensure we don't reconnect to MQTT while reconnecting to Wi-Fi
   wifiReconnectTimer.once(2, connectToWifi);
 }

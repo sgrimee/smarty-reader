@@ -64,7 +64,8 @@ AsyncMqttClient mqttClient;
 
 SmartyMeter smarty(decrypt_key, D3);
 
-int next_dsmr_to_send = INT_MAX;
+int idx_next_dsmr_val_to_send = INT_MAX;
+int idx_next_dsmr_unit_to_send = INT_MAX;
 
 int last_mqtt_id_sent = 0;
 int last_mqtt_id_ack = 0;
@@ -73,29 +74,6 @@ int last_mqtt_id_ack = 0;
 char topic[70];
 
 // MQTT
-
-/*
-  Publish the units to mqtt. Meant to be called just once after connecting.
-*/
-void publish_units_mqtt()
-{
-  DEBUG_PRINTLN("Entering publish_units_mqtt");
-  for (int i = 0; i < smarty.num_dsmr_fields; i++)
-  {
-    #ifdef IGNORE_EMPTY_UNITS
-    if (dsmr[i].unit[0] == 0)
-    {
-      DEBUG_PRINTF("Ignoring mqtt publish of unit for %s\n", dsmr[i].name);
-      continue;
-    }
-    #endif
-    sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[i].name);
-    DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[i].unit);
-    if (mqttClient.publish(topic, 0, true, dsmr[i].unit) == 0) {
-      DEBUG_PRINTLN("ERROR sending unit.");
-    }
-  }
-}
 
 void connectToMqtt() {
   DEBUG_PRINTLN("Connecting to MQTT...");
@@ -106,7 +84,7 @@ void onMqttConnect(bool sessionPresent) {
   DEBUG_PRINTLN("Connected to MQTT.");
   DEBUG_PRINT("Session present: ");
   DEBUG_PRINTLN(sessionPresent);
-  publish_units_mqtt();
+  start_publishing_dsmr_units();
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
@@ -172,8 +150,12 @@ void setup()
   digitalWrite(LED_BUILTIN, HIGH); // Off
 }
 
-void start_publishing_dsmr() {
-	next_dsmr_to_send = 0;
+void start_publishing_dsmr_values() {
+	idx_next_dsmr_val_to_send = 0;
+}
+
+void start_publishing_dsmr_units() {
+	idx_next_dsmr_unit_to_send = 0;
 }
 
 void read_smarty_data()
@@ -182,40 +164,67 @@ void read_smarty_data()
   if (smarty.readAndDecodeData())
   {
     smarty.printDsmr();
-    start_publishing_dsmr();
+    start_publishing_dsmr_values();
   }
   DEBUG_PRINTLN("Done reading.");
 }
 
-bool can_publish() {
+bool can_publish_mqtt() {
   // Only send MQTT_QUEUE_SIZE more publish than the last one acknowledged
   if (! mqttClient.connected()) return false;
   if (last_mqtt_id_ack > (65535 - MQTT_QUEUE_SIZE)) return true;
 	return ((last_mqtt_id_ack + MQTT_QUEUE_SIZE) >= last_mqtt_id_sent);
 }
 
-bool need_publish() {
-	return (next_dsmr_to_send < smarty.num_dsmr_fields);
+bool need_publish_value() {
+	return (idx_next_dsmr_val_to_send < smarty.num_dsmr_fields);
+}
+
+bool need_publish_unit() {
+	return (idx_next_dsmr_unit_to_send < smarty.num_dsmr_fields);
 }
 
 
-void publish_next_dsmr() {
-  sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[next_dsmr_to_send].name);
-  DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[next_dsmr_to_send].value);
-  int packetId = mqttClient.publish(topic, 1, false, dsmr[next_dsmr_to_send].value);
+void publish_next_dsmr_value() {
+  sprintf(topic, "%s/%s/value", MQTT_TOPIC, dsmr[idx_next_dsmr_val_to_send].name);
+  DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[idx_next_dsmr_val_to_send].value);
+  int packetId = mqttClient.publish(topic, 1, false, dsmr[idx_next_dsmr_val_to_send].value);
   if (packetId == 0) {
-    DEBUG_PRINTF("ERROR sending packet id %d\n", packetId);
+    DEBUG_PRINTF("ERROR publishing %s\n", topic);
     return;
   }
   DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
-  next_dsmr_to_send++;
+  idx_next_dsmr_val_to_send++;
+  last_mqtt_id_sent = packetId;
+}
+
+void publish_next_dsmr_unit() {
+  #ifdef IGNORE_EMPTY_UNITS
+  if (dsmr[idx_next_dsmr_unit_to_send].unit[0] == 0)
+  {
+    DEBUG_PRINTF("Ignoring mqtt publish of unit for %s\n", dsmr[idx_next_dsmr_unit_to_send].name);
+    return;
+  }
+  #endif
+  sprintf(topic, "%s/%s/unit", MQTT_TOPIC, dsmr[idx_next_dsmr_unit_to_send].name);
+  DEBUG_PRINTF("Publishing topic %s with value (%s)\n", topic, dsmr[idx_next_dsmr_unit_to_send].unit);
+  int packetId = mqttClient.publish(topic, 1, true, dsmr[idx_next_dsmr_unit_to_send].value);
+  if (packetId == 0) {
+    DEBUG_PRINTF("ERROR publishing %s\n", topic);
+    return;
+  }
+  DEBUG_PRINTF("Sent packet with id: %d\n", packetId);
+  idx_next_dsmr_unit_to_send++;
   last_mqtt_id_sent = packetId;
 }
 
 void loop()
 {
-  if (need_publish() && can_publish()) {
-    publish_next_dsmr();
+  if (need_publish_value() && can_publish_mqtt()) {
+    publish_next_dsmr_value();
+  }
+  if (need_publish_unit() && can_publish_mqtt()) {
+    publish_next_dsmr_unit();
   }
 }
 

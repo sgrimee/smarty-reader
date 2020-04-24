@@ -20,13 +20,12 @@
 // IPAddress gateway_ip (192,168,178,1);
 // IPAddress subnet_mask(255,255,255,0);
 
-#define USE_MQTT
 #define MQTT_SERVER "192.168.1.100"
 #define MQTT_PORT 1883
 #define MQTT_TOPIC "lamsmarty"
 
 // Uncomment if you would rather not publish empty units
-//#define IGNORE_EMPTY_UNITS
+#define IGNORE_EMPTY_UNITS
 
 // Add your decryption key here, obtained from your electricity provider.
 uint8_t decrypt_key[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x00,

@@ -8,7 +8,7 @@ Read smart Luxembourgish electricity and gaz counter values with ESP8266.
 
 In Luxembourg, electricty and gas counters are being replaced with smart counters that allow the provider to remotely measure consumption values. A special port is provided to allow the end-user to capture the data, for example for integration with home automation systems.
 
-This work is a fork of the [awesome project by Guy WEILER](http://weigu.lu/microcontroller/smartyreader/) who did all the hard work on both the software and hardware side. Please review [Guy's website](http://weigu.lu/microcontroller/smartyreader/) for technical details on the solution, PCB layout, etc.
+This work is a fork of the [awesome project by Guy WEILER](http://www.weigu.lu/microcontroller/smartyReader_P1/index.html) who did all the hard work on both the software and hardware side. Please review [Guy's website](http://www.weigu.lu/microcontroller/smartyReader_P1/index.html) for technical details on the solution, PCB layout, etc.
 
 # Features
 
@@ -24,7 +24,7 @@ This work is a fork of the [awesome project by Guy WEILER](http://weigu.lu/micro
 
 - A 'smarty' electricity meter
 - Your personal decryption key, that you need to ask from the provider Creos, giving them your counter number
-- A Wimo D1 mini pro micro-controller and adaptation board. See [Guy's website](http://weigu.lu/microcontroller/smartyreader/)
+- A Wimo D1 mini pro micro-controller and adaptation board. See [Guy's website](http://www.weigu.lu/microcontroller/smartyReader_P1/index.html)
 
 # Sample output in MQTT
 

@@ -6,6 +6,8 @@ Read smart Luxembourgish electricity and gaz counter values with ESP8266.
 
 I am not actively maintaining this project any more because I have been unable to fix a recurring issue where the ESP8266 just hangs/disappears. I am considering a re-write in Rust on the ESP32-C3 platform instead as a new challenge.
 
+Update Oct 2022: The original author has just published a [new version of his code](https://github.com/weigu1/SmartyReader/tree/main/Arduino/SmartyReader_P1_WiFi) (1.6) that includes most of the features I need, make sure to check it out.
+
 # Overview
 
 <img src="http://weigu.lu/microcontroller/smartyreader/png/smartyreader_1_800.png"  width="150"/>
